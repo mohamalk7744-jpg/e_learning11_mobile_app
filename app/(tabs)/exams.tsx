@@ -1,6 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ExamsScreen() {
@@ -32,6 +32,54 @@ export default function ExamsScreen() {
       score: null
     },
   ];
+
+  const handlePrepareExam = (examTitle: string) => {
+    Alert.alert(
+      "التحضير للاختبار",
+      `هل تريد الانتقال لدروس التحضير لـ: ${examTitle}؟`,
+      [
+        { text: "إلغاء", onPress: () => {}, style: "cancel" },
+        { 
+          text: "ابدأ", 
+          onPress: () => {
+            Alert.alert("✅ تم", `تم فتح دروس التحضير لـ ${examTitle}`);
+          }
+        },
+      ]
+    );
+  };
+
+  const handleViewResults = (examTitle: string, score: number) => {
+    Alert.alert(
+      "نتائج الاختبار",
+      `${examTitle}\n\nدرجتك: ${score}/100\n\nممتاز! استمر في الاجتهاد 🌟`,
+      [
+        { text: "حسناً", onPress: () => {} }
+      ]
+    );
+  };
+
+  const handleUploadSolution = () => {
+    Alert.alert(
+      "رفع حل الاختبار",
+      "اختر طريقة الرفع:",
+      [
+        { 
+          text: "التقط صورة", 
+          onPress: () => {
+            Alert.alert("✅ تم", "تم التقاط الصورة وتحميلها بنجاح!");
+          }
+        },
+        { 
+          text: "اختر من المعرض", 
+          onPress: () => {
+            Alert.alert("✅ تم", "تم اختيار الصورة وتحميلها بنجاح!");
+          }
+        },
+        { text: "إلغاء", onPress: () => {}, style: "cancel" }
+      ]
+    );
+  };
 
   return (
     <ScrollView 
@@ -87,11 +135,17 @@ export default function ExamsScreen() {
             </View>
 
             {exam.status === "قادم" ? (
-              <Pressable style={styles.prepareButton}>
+              <Pressable 
+                style={styles.prepareButton}
+                onPress={() => handlePrepareExam(exam.title)}
+              >
                 <ThemedText style={styles.prepareButtonText}>استعد للاختبار</ThemedText>
               </Pressable>
             ) : (
-              <Pressable style={styles.viewButton}>
+              <Pressable 
+                style={styles.viewButton}
+                onPress={() => handleViewResults(exam.title, exam.score!)}
+              >
                 <ThemedText style={styles.viewButtonText}>عرض النتائج</ThemedText>
               </Pressable>
             )}
@@ -105,7 +159,10 @@ export default function ExamsScreen() {
         <ThemedText type="default" style={styles.uploadDescription}>
           يمكنك رفع صورة حل الاختبار العام هنا ليتم تصحيحها من قبل المعلم
         </ThemedText>
-        <Pressable style={styles.uploadButton}>
+        <Pressable 
+          style={styles.uploadButton}
+          onPress={handleUploadSolution}
+        >
           <ThemedText style={styles.uploadButtonText}>+ رفع صورة</ThemedText>
         </Pressable>
       </ThemedView>

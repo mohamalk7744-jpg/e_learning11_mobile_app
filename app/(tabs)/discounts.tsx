@@ -1,6 +1,6 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function DiscountsScreen() {
@@ -11,6 +11,22 @@ export default function DiscountsScreen() {
     { id: 2, company: "معهد اللغات", discount: "500 ريال", description: "خصم على برامج اللغة الإنجليزية", type: "fixed" },
     { id: 3, company: "مركز الرياضيات", discount: "25%", description: "خصم على الحصص الخصوصية", type: "percentage" },
   ];
+
+  const handleUseDiscount = (company: string, discount: string) => {
+    Alert.alert(
+      "استخدام الحسم",
+      `هل تريد استخدام حسم ${discount} من ${company}؟`,
+      [
+        { text: "إلغاء", onPress: () => {}, style: "cancel" },
+        { 
+          text: "استخدم", 
+          onPress: () => {
+            Alert.alert("✅ تم", `تم استخدام حسم ${discount} بنجاح!\nسيتم تطبيقه على طلبك التالي.`);
+          }
+        },
+      ]
+    );
+  };
 
   return (
     <ScrollView 
@@ -52,7 +68,10 @@ export default function DiscountsScreen() {
                 </ThemedText>
               </View>
             </View>
-            <Pressable style={styles.useButton}>
+            <Pressable 
+              style={styles.useButton}
+              onPress={() => handleUseDiscount(discount.company, discount.discount)}
+            >
               <ThemedText style={styles.useButtonText}>استخدم الآن</ThemedText>
             </Pressable>
           </Pressable>

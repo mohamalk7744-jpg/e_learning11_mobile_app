@@ -1,10 +1,12 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const todayLessons = [
     { id: 1, title: "الرياضيات", chapter: "الفصل 5", time: "09:00 AM", duration: "45 دقيقة" },
@@ -16,6 +18,38 @@ export default function ScheduleScreen() {
     { id: 1, title: "اختبار الرياضيات", time: "11:30 AM", duration: "30 دقيقة" },
   ];
 
+  const handleStartLesson = (lessonTitle: string) => {
+    Alert.alert(
+      "بدء الدرس",
+      `هل تريد بدء درس: ${lessonTitle}؟`,
+      [
+        { text: "إلغاء", onPress: () => {}, style: "cancel" },
+        { 
+          text: "ابدأ", 
+          onPress: () => {
+            Alert.alert("✅ تم", `تم بدء درس ${lessonTitle} بنجاح!`);
+          }
+        },
+      ]
+    );
+  };
+
+  const handleTakeQuiz = (quizTitle: string) => {
+    Alert.alert(
+      "بدء الاختبار",
+      `هل تريد بدء: ${quizTitle}؟`,
+      [
+        { text: "إلغاء", onPress: () => {}, style: "cancel" },
+        { 
+          text: "ابدأ", 
+          onPress: () => {
+            Alert.alert("✅ تم", `تم بدء ${quizTitle} بنجاح!`);
+          }
+        },
+      ]
+    );
+  };
+
   return (
     <ScrollView 
       style={styles.container}
@@ -26,7 +60,7 @@ export default function ScheduleScreen() {
     >
       <ThemedView style={styles.header}>
         <ThemedText type="title">الخطة الدراسية</ThemedText>
-        <ThemedText type="default" style={styles.date}>اليوم - 23 ديسمبر 2025</ThemedText>
+        <ThemedText type="default" style={styles.date}>اليوم - 24 ديسمبر 2025</ThemedText>
       </ThemedView>
 
       {/* Lessons Section */}
@@ -56,7 +90,10 @@ export default function ScheduleScreen() {
                 </ThemedText>
               </View>
             </View>
-            <Pressable style={styles.startButton}>
+            <Pressable 
+              style={styles.startButton}
+              onPress={() => handleStartLesson(lesson.title)}
+            >
               <ThemedText style={styles.startButtonText}>ابدأ</ThemedText>
             </Pressable>
           </Pressable>
@@ -87,7 +124,10 @@ export default function ScheduleScreen() {
                 </ThemedText>
               </View>
             </View>
-            <Pressable style={styles.takeButton}>
+            <Pressable 
+              style={styles.takeButton}
+              onPress={() => handleTakeQuiz(quiz.title)}
+            >
               <ThemedText style={styles.takeButtonText}>اختبر</ThemedText>
             </Pressable>
           </Pressable>
