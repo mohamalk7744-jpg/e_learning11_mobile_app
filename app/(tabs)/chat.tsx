@@ -1,88 +1,191 @@
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, TextInput, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useState } from "react";
+import { useState, useRef, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { trpc } from '@/lib/trpc';
+
+interface Message {
+  id: string;
+  type: 'user' | 'bot';
+  text: string;
+  timestamp: Date;
+}
 
 export default function ChatScreen() {
-  const insets = useSafeAreaInsets();
-  const [message, setMessage] = useState("");
+  const colorScheme = useColorScheme();
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      type: 'bot',
+      text: 'مرحباً! أنا بوت التعليم الذكي. يمكنك أن تسأل أي سؤال عن المناهج الدراسية وسأساعدك بإجابة شاملة.',
+      timestamp: new Date(),
+    },
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const chatMutation = trpc.chat.ask.useMutation();
 
-  const messages = [
-    { id: 1, type: "bot", text: "مرحباً! أنا بوت التعليم الذكي. كيف يمكنني مساعدتك؟" },
-    { id: 2, type: "user", text: "ما هي المعادلات الخطية؟" },
-    { id: 3, type: "bot", text: "المعادلة الخطية هي معادلة من الدرجة الأولى تحتوي على متغير واحد أو أكثر. الصيغة العامة: ax + b = 0" },
-  ];
+  useEffect(() => {
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if (!inputText.trim()) return;
+
+    // Add user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      type: 'user',
+      text: inputText,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInputText('');
+    setLoading(true);
+
+    try {
+      const result = await chatMutation.mutateAsync({
+        question: inputText,
+        curriculum: 'المنهاج السوري',
+      });
+
+      const botMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'bot',
+        text: result.answer,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, botMessage]);
+    } catch (error) {
+      console.error('Chat error:', error);
+      Alert.alert('خطأ', 'حدث خطأ في الاتصال. الرجاء المحاولة مرة أخرى.');
+      const errorMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        type: 'bot',
+        text: 'عذراً، حدث خطأ في الاتصال. الرجاء المحاولة مرة أخرى.',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <ThemedView 
-      style={[
-        styles.container,
-        {
-          paddingTop: Math.max(insets.top, 16),
-          paddingBottom: Math.max(insets.bottom, 16),
-        }
-      ]}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
     >
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">البوت الذكي</ThemedText>
-        <ThemedText type="default" style={styles.subtitle}>اسأل أي سؤال عن المنهاج</ThemedText>
-      </ThemedView>
+      <ThemedView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <ThemedText type="title">💬 البوت الذكي</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            اسأل أي سؤال عن المناهج الدراسية
+          </ThemedText>
+        </View>
 
-      <ScrollView style={styles.messagesContainer}>
-        {messages.map((msg) => (
-          <View 
-            key={msg.id}
-            style={[
-              styles.messageWrapper,
-              msg.type === "user" ? styles.userMessageWrapper : styles.botMessageWrapper
-            ]}
-          >
-            <View 
+        {/* Messages */}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
+          onContentSizeChange={() =>
+            scrollViewRef.current?.scrollToEnd({ animated: true })
+          }
+        >
+          {messages.map((message) => (
+            <View
+              key={message.id}
               style={[
-                styles.messageBubble,
-                msg.type === "user" ? styles.userMessage : styles.botMessage
+                styles.messageWrapper,
+                message.type === 'user'
+                  ? styles.userMessageWrapper
+                  : styles.botMessageWrapper,
               ]}
             >
-              <ThemedText 
-                type="default"
+              <View
                 style={[
-                  styles.messageText,
-                  msg.type === "user" && styles.userMessageText
+                  styles.messageBubble,
+                  message.type === 'user'
+                    ? [
+                        styles.userBubble,
+                        { backgroundColor: Colors[colorScheme ?? 'light'].tint },
+                      ]
+                    : [
+                        styles.botBubble,
+                        {
+                          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                        },
+                      ],
                 ]}
               >
-                {msg.text}
+                <ThemedText
+                  style={[
+                    styles.messageText,
+                    message.type === 'user' && styles.userMessageText,
+                  ]}
+                >
+                  {message.text}
+                </ThemedText>
+              </View>
+            </View>
+          ))}
+
+          {loading && (
+            <View style={styles.loadingWrapper}>
+              <ActivityIndicator
+                color={Colors[colorScheme ?? 'light'].tint}
+                size="small"
+              />
+              <ThemedText style={styles.loadingText}>
+                جاري الرد...
               </ThemedText>
             </View>
-          </View>
-        ))}
-      </ScrollView>
+          )}
+        </ScrollView>
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="اكتب سؤالك هنا..."
-          placeholderTextColor="#999"
-          value={message}
-          onChangeText={setMessage}
-          multiline
-          maxHeight={100}
-        />
-        <Pressable 
-          style={({ pressed }) => [
-            styles.sendButton,
-            pressed && styles.sendButtonPressed
-          ]}
-          onPress={() => {
-            if (message.trim()) {
-              setMessage("");
-            }
-          }}
-        >
-          <ThemedText style={styles.sendButtonText}>إرسال</ThemedText>
-        </Pressable>
-      </View>
-    </ThemedView>
+        {/* Input */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                borderColor: Colors[colorScheme ?? 'light'].tint,
+                color: Colors[colorScheme ?? 'light'].text,
+              },
+            ]}
+            placeholder="اكتب سؤالك هنا..."
+            placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
+            value={inputText}
+            onChangeText={setInputText}
+            editable={!loading}
+            multiline
+            maxLength={500}
+          />
+          <Pressable
+            style={[
+              styles.sendButton,
+              {
+                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+              },
+              (loading || !inputText.trim()) && styles.sendButtonDisabled,
+            ]}
+            onPress={handleSendMessage}
+            disabled={loading || !inputText.trim()}
+          >
+            <ThemedText style={styles.sendButtonText}>
+              {loading ? '...' : '📤'}
+            </ThemedText>
+          </Pressable>
+        </View>
+      </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -93,77 +196,89 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   subtitle: {
-    fontSize: 13,
-    opacity: 0.7,
+    fontSize: 12,
+    opacity: 0.6,
     marginTop: 4,
   },
   messagesContainer: {
     flex: 1,
+  },
+  messagesContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    gap: 12,
   },
   messageWrapper: {
-    marginBottom: 12,
-    flexDirection: "row",
+    flexDirection: 'row',
+    marginBottom: 8,
   },
   userMessageWrapper: {
-    justifyContent: "flex-end",
+    justifyContent: 'flex-end',
   },
   botMessageWrapper: {
-    justifyContent: "flex-start",
+    justifyContent: 'flex-start',
   },
   messageBubble: {
-    maxWidth: "80%",
+    maxWidth: '80%',
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    paddingHorizontal: 14,
     borderRadius: 12,
   },
-  userMessage: {
-    backgroundColor: "#007AFF",
+  userBubble: {
+    borderBottomRightRadius: 4,
   },
-  botMessage: {
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
+  botBubble: {
+    borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 14,
     lineHeight: 20,
   },
   userMessageText: {
-    color: "#fff",
+    color: '#fff',
+  },
+  loadingWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  loadingText: {
+    fontSize: 12,
+    opacity: 0.6,
   },
   inputContainer: {
-    flexDirection: "row",
+    flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
-    alignItems: "flex-end",
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   input: {
     flex: 1,
+    borderWidth: 1,
     borderRadius: 20,
-    paddingVertical: 10,
     paddingHorizontal: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.08)",
+    paddingVertical: 10,
     fontSize: 14,
     maxHeight: 100,
   },
   sendButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    backgroundColor: "#007AFF",
-    justifyContent: "center",
-    alignItems: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sendButtonPressed: {
-    opacity: 0.8,
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
   sendButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 18,
   },
 });

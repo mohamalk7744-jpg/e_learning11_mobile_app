@@ -1,289 +1,240 @@
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, Pressable, ActivityIndicator, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useState, useEffect } from 'react';
+import { StyleSheet, View, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { useAuth } from '@/hooks/use-auth';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function HomeScreen() {
-  const { user, loading, isAuthenticated, logout } = useAuth();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const colorScheme = useColorScheme();
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  const [stats, setStats] = useState({
+    lessonsToday: 3,
+    quizzesToday: 1,
+    newDiscounts: 2,
+    completedLessons: 12,
+    totalLessons: 30,
+  });
+
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.replace('/auth/login');
+    }
+  }, [loading, isAuthenticated, router]);
 
   if (loading) {
     return (
       <ThemedView style={styles.container}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
       </ThemedView>
     );
   }
 
-  if (!isAuthenticated || !user) {
-    return (
-      <ThemedView style={[styles.container, styles.centerContent]}>
-        <View style={styles.welcomeContent}>
-          <ThemedText type="title" style={styles.welcomeTitle}>
-            مرحباً بك في التعلم عن بعد
-          </ThemedText>
-          <ThemedText type="default" style={styles.welcomeDescription}>
-            الرجاء تسجيل الدخول للوصول إلى مقرراتك الدراسية
-          </ThemedText>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.loginButton,
-              pressed && styles.loginButtonPressed
-            ]}
-            onPress={() => router.push("/")}
-          >
-            <ThemedText style={styles.loginText}>تسجيل الدخول</ThemedText>
-          </Pressable>
-        </View>
-      </ThemedView>
-    );
+  if (!isAuthenticated) {
+    return null;
   }
+
+  const progressPercent = Math.round((stats.completedLessons / stats.totalLessons) * 100);
 
   return (
-    <ScrollView 
-      style={styles.container}
-      contentContainerStyle={{
-        paddingTop: Math.max(insets.top, 16),
-        paddingBottom: Math.max(insets.bottom, 16),
-      }}
-    >
-      {/* Header Section */}
-      <ThemedView style={styles.header}>
-        <ThemedText type="title" style={styles.greeting}>
-          أهلاً، {user.name || user.email}
-        </ThemedText>
-        <ThemedText type="default" style={styles.subtitle}>
-          استمر في رحلتك التعليمية
-        </ThemedText>
-      </ThemedView>
-
-      {/* Quick Stats */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <ThemedText type="defaultSemiBold" style={styles.statNumber}>3</ThemedText>
-          <ThemedText type="default" style={styles.statLabel}>دروس اليوم</ThemedText>
-        </View>
-        <View style={styles.statCard}>
-          <ThemedText type="defaultSemiBold" style={styles.statNumber}>1</ThemedText>
-          <ThemedText type="default" style={styles.statLabel}>اختبار</ThemedText>
-        </View>
-        <View style={styles.statCard}>
-          <ThemedText type="defaultSemiBold" style={styles.statNumber}>2</ThemedText>
-          <ThemedText type="default" style={styles.statLabel}>عروض جديدة</ThemedText>
-        </View>
-      </View>
-
-      {/* Today's Lesson */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>درس اليوم</ThemedText>
-        <Pressable 
-          style={({ pressed }) => [
-            styles.lessonCard,
-            pressed && styles.lessonCardPressed
-          ]}
-          onPress={() => router.push("/(tabs)/schedule")}
-        >
-          <View style={styles.lessonContent}>
-            <ThemedText type="defaultSemiBold" style={styles.lessonTitle}>
-              الرياضيات - الفصل 5
+    <ScrollView style={styles.scrollContainer}>
+      <ThemedView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <ThemedText type="title">أهلاً، {user?.name || 'الطالب'}</ThemedText>
+            <ThemedText style={styles.subtitle}>
+              استمر في رحلتك التعليمية
             </ThemedText>
-            <ThemedText type="default" style={styles.lessonDescription}>
-              المعادلات الخطية والتطبيقات
-            </ThemedText>
-            <View style={styles.lessonMeta}>
-              <ThemedText type="default" style={styles.lessonTime}>
-                ⏱️ 45 دقيقة
-              </ThemedText>
+          </View>
+        </View>
+
+        {/* Statistics */}
+        <View style={styles.statsContainer}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            📊 إحصائيات اليوم
+          </ThemedText>
+          <View style={styles.statsGrid}>
+            <View style={[styles.statCard, { borderLeftColor: Colors[colorScheme ?? 'light'].tint }]}>
+              <ThemedText style={styles.statNumber}>{stats.lessonsToday}</ThemedText>
+              <ThemedText style={styles.statLabel}>دروس</ThemedText>
+            </View>
+            <View style={[styles.statCard, { borderLeftColor: '#FF9500' }]}>
+              <ThemedText style={styles.statNumber}>{stats.quizzesToday}</ThemedText>
+              <ThemedText style={styles.statLabel}>اختبار</ThemedText>
+            </View>
+            <View style={[styles.statCard, { borderLeftColor: '#34C759' }]}>
+              <ThemedText style={styles.statNumber}>{stats.newDiscounts}</ThemedText>
+              <ThemedText style={styles.statLabel}>عروض جديدة</ThemedText>
             </View>
           </View>
-        </Pressable>
-      </ThemedView>
+        </View>
 
-      {/* Quick Actions */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>الوصول السريع</ThemedText>
-        <Pressable 
-          style={({ pressed }) => [
-            styles.actionButton,
-            pressed && styles.actionButtonPressed
-          ]}
-          onPress={() => router.push("/(tabs)/chat")}
-        >
-          <ThemedText type="defaultSemiBold" style={styles.actionButtonText}>
-            💬 اسأل البوت
+        {/* Progress */}
+        <View style={styles.progressContainer}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            📈 تقدمك الدراسي
           </ThemedText>
-        </Pressable>
-        <Pressable 
-          style={({ pressed }) => [
-            styles.actionButton,
-            pressed && styles.actionButtonPressed
-          ]}
-          onPress={() => router.push("/(tabs)/discounts")}
-        >
-          <ThemedText type="defaultSemiBold" style={styles.actionButtonText}>
-            🎉 عروض خاصة
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill,
+                { 
+                  width: `${progressPercent}%`,
+                  backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                }
+              ]} 
+            />
+          </View>
+          <ThemedText style={styles.progressText}>
+            {stats.completedLessons} من {stats.totalLessons} درس ({progressPercent}%)
           </ThemedText>
-        </Pressable>
-      </ThemedView>
+        </View>
 
-      {/* Logout Button */}
-      <Pressable 
-        style={({ pressed }) => [
-          styles.logoutButton,
-          pressed && styles.logoutButtonPressed
-        ]}
-        onPress={logout}
-      >
-        <ThemedText style={styles.logoutText}>تسجيل الخروج</ThemedText>
-      </Pressable>
+        {/* Quick Actions */}
+        <View style={styles.actionsContainer}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>
+            ⚡ إجراءات سريعة
+          </ThemedText>
+          
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+            onPress={() => router.push('/(tabs)/schedule')}
+          >
+            <ThemedText style={styles.actionButtonText}>📚 درس اليوم</ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: '#FF9500' }]}
+            onPress={() => router.push('/(tabs)/chat')}
+          >
+            <ThemedText style={styles.actionButtonText}>💬 اسأل البوت</ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: '#34C759' }]}
+            onPress={() => router.push('/(tabs)/discounts')}
+          >
+            <ThemedText style={styles.actionButtonText}>🎉 عروض خاصة</ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[styles.actionButton, { backgroundColor: '#FF3B30' }]}
+            onPress={() => router.push('/(tabs)/exams')}
+          >
+            <ThemedText style={styles.actionButtonText}>✏️ الاختبارات</ThemedText>
+          </Pressable>
+        </View>
+
+        {/* Logout */}
+        <Pressable
+          style={styles.logoutButton}
+          onPress={logout}
+        >
+          <ThemedText style={styles.logoutText}>تسجيل الخروج</ThemedText>
+        </Pressable>
+
+        <View style={styles.spacer} />
+      </ThemedView>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollContainer: {
     flex: 1,
   },
-  centerContent: {
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  welcomeContent: {
-    width: "100%",
-    alignItems: "center",
-    gap: 16,
-  },
-  welcomeTitle: {
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  welcomeDescription: {
-    textAlign: "center",
-    marginBottom: 24,
-    fontSize: 16,
-    lineHeight: 24,
+  container: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 40,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    marginBottom: 16,
-  },
-  greeting: {
-    marginBottom: 8,
+    marginBottom: 24,
   },
   subtitle: {
     fontSize: 14,
     opacity: 0.7,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    marginBottom: 12,
+    fontSize: 18,
   },
   statsContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
     marginBottom: 24,
   },
+  statsGrid: {
+    gap: 12,
+  },
   statCard: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
   },
   statNumber: {
     fontSize: 24,
-    marginBottom: 4,
+    fontWeight: 'bold',
   },
   statLabel: {
     fontSize: 12,
-    textAlign: "center",
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
-    gap: 12,
-  },
-  sectionTitle: {
-    marginBottom: 8,
-  },
-  lessonCard: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 122, 255, 0.08)",
-    borderLeftWidth: 4,
-    borderLeftColor: "#007AFF",
-  },
-  lessonCardPressed: {
-    opacity: 0.7,
-  },
-  lessonContent: {
-    gap: 8,
-  },
-  lessonTitle: {
-    fontSize: 16,
-  },
-  lessonDescription: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  lessonMeta: {
+    opacity: 0.6,
     marginTop: 4,
   },
-  lessonTime: {
+  progressContainer: {
+    marginBottom: 24,
+    paddingHorizontal: 0,
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
     fontSize: 12,
+    opacity: 0.6,
+  },
+  actionsContainer: {
+    marginBottom: 24,
   },
   actionButton: {
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  actionButtonPressed: {
-    opacity: 0.6,
+    borderRadius: 8,
+    marginBottom: 10,
+    alignItems: 'center',
   },
   actionButtonText: {
-    fontSize: 15,
-  },
-  loginButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 10,
-    minHeight: 44,
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100%",
-  },
-  loginButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
-  },
-  loginText: {
-    color: "#fff",
+    color: '#fff',
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: '600',
   },
   logoutButton: {
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 16,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
-    alignItems: "center",
-  },
-  logoutButtonPressed: {
-    opacity: 0.6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    alignItems: 'center',
+    marginTop: 16,
   },
   logoutText: {
-    color: "#FF3B30",
+    color: '#FF3B30',
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
+  },
+  spacer: {
+    height: 20,
   },
 });

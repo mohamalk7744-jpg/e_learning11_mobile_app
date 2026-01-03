@@ -274,6 +274,18 @@ export const appRouter = router({
           answer: input.answer,
         })
       ),
+    ask: protectedProcedure
+      .input(
+        z.object({
+          question: z.string().min(1),
+          curriculum: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { askGemini } = await import("./services/gemini");
+        const answer = await askGemini(input.question, input.curriculum);
+        return { answer };
+      }),
   }),
 
   notifications: router({
@@ -351,5 +363,4 @@ export const appRouter = router({
       ),
   }),
 });
-
 export type AppRouter = typeof appRouter;
