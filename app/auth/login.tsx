@@ -36,12 +36,13 @@ export default function LoginScreen() {
       await Auth.setUserInfo(mockUser);
       await Auth.setSessionToken('mock_token_' + Date.now());
 
-      Alert.alert('نجاح', 'تم تسجيل الدخول بنجاح');
-      router.replace('/(tabs)');
+      // انتظر قليلاً ثم انتقل للصفحة الرئيسية
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 500);
     } catch (error) {
       Alert.alert('خطأ', 'فشل تسجيل الدخول. الرجاء المحاولة مرة أخرى');
       console.error('Login error:', error);
-    } finally {
       setLoading(false);
     }
   };
