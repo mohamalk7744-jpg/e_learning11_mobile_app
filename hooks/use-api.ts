@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { trpc } from "@/lib/trpc";
 
 export function useSubjects() {
   const [loading, setLoading] = useState(false);
@@ -9,8 +8,8 @@ export function useSubjects() {
     setLoading(true);
     setError(null);
     try {
-      const result = await trpc.subjects.list.query();
-      return result;
+      // Mock data for now
+      return [];
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch subjects";
       setError(message);
@@ -31,8 +30,8 @@ export function useLessons() {
     setLoading(true);
     setError(null);
     try {
-      const result = await trpc.lessons.listBySubject.query({ subjectId });
-      return result;
+      // Mock data for now
+      return [];
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch lessons";
       setError(message);
@@ -53,8 +52,8 @@ export function useQuizzes() {
     setLoading(true);
     setError(null);
     try {
-      const result = await trpc.quizzes.listBySubject.query({ subjectId });
-      return result;
+      // Mock data for now
+      return [];
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch quizzes";
       setError(message);
@@ -75,8 +74,8 @@ export function useDiscounts() {
     setLoading(true);
     setError(null);
     try {
-      const result = await trpc.discounts.list.query();
-      return result;
+      // Mock data for now
+      return [];
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch discounts";
       setError(message);
@@ -97,8 +96,8 @@ export function useNotifications() {
     setLoading(true);
     setError(null);
     try {
-      const result = await trpc.notifications.getUserNotifications.query({ userId });
-      return result;
+      // Mock data for now
+      return [];
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch notifications";
       setError(message);
