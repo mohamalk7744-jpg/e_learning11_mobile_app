@@ -6,6 +6,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import * as Auth from '@/lib/auth';
+import { trpc } from '@/lib/trpc';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -13,6 +14,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('student@example.com');
   const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
+  
+  // استخدام tRPC للاتصال بـ API
+  const loginMutation = trpc.auth.login.useMutation();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -22,26 +26,43 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      // محاكاة تسجيل دخول - في الواقع ستتصل بـ API
-      const mockUser: Auth.User = {
-        id: 1,
-        openId: 'student_001',
-        name: 'محمد أحمد',
-        email: email,
-        loginMethod: 'email',
-        lastSignedIn: new Date(),
-      };
+      // استدعاء API من السيرفر
+      const result = await loginMutation.mutateAsync({
+        email: email.trim(),
+        password: password.trim(),
+      });
 
-      // حفظ بيانات المستخدم
-      await Auth.setUserInfo(mockUser);
-      await Auth.setSessionToken('mock_token_' + Date.now());
+      if (result.success && result.user) {
+        const user = result.user;
+        
+        // حفظ بيانات المستخدم
+        const userInfo: Auth.User = {
+          id: user.id,
+          openId: user.openId,
+          name: user.name || '',
+          email: user.email || '',
+          loginMethod: user.loginMethod || 'email',
+          lastSignedIn: new Date(user.lastSignedIn),
+          role: user.role as 'user' | 'admin',
+        };
+        
+        await Auth.setUserInfo(userInfo);
+        await Auth.setSessionToken('session_' + Date.now());
 
-      // انتظر قليلاً ثم انتقل للصفحة الرئيسية
-      setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 500);
+        // التوجيه حسب دور المستخدم
+        setTimeout(() => {
+          if (user.role === 'admin') {
+            // المعلم/المسؤول → لوحة التحكم
+            router.replace('/(tabs)' as any);
+          } else {
+            // الطالب → التطبيق العادي
+            router.replace('/(tabs)');
+          }
+        }, 500);
+      }
     } catch (error) {
-      Alert.alert('خطأ', 'فشل تسجيل الدخول. الرجاء المحاولة مرة أخرى');
+      const message = error instanceof Error ? error.message : 'فشل تسجيل الدخول';
+      Alert.alert('خطأ', message);
       console.error('Login error:', error);
       setLoading(false);
     }
@@ -119,7 +140,20 @@ export default function LoginScreen() {
         <View style={styles.demoInfo}>
           <ThemedText style={styles.demoTitle}>بيانات تجريبية:</ThemedText>
           <ThemedText style={styles.demoText}>
+            👨‍🎓 طالب:
+          </ThemedText>
+          <ThemedText style={styles.demoText}>
             البريد: student@example.com
+          </ThemedText>
+          <ThemedText style={styles.demoText}>
+            كلمة المرور: password123
+          </ThemedText>
+          
+          <ThemedText style={[styles.demoText, { marginTop: 12 }]}>
+            👨‍🏫 معلم:
+          </ThemedText>
+          <ThemedText style={styles.demoText}>
+            البريد: teacher@example.com
           </ThemedText>
           <ThemedText style={styles.demoText}>
             كلمة المرور: password123
