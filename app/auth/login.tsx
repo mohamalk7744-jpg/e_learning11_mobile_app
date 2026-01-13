@@ -52,8 +52,8 @@ export default function LoginScreen() {
         // التوجيه حسب دور المستخدم
         setTimeout(() => {
           if (user.role === 'admin') {
-            // المعلم/المسؤول → لوحة التحكم
-            router.replace('/(tabs)' as any);
+            // المعلم/المسؤول → صفحة الإعداد
+            router.replace('/admin/setup' as any);
           } else {
             // الطالب → التطبيق العادي
             router.replace('/(tabs)');
