@@ -52,7 +52,7 @@ EXPO_PUBLIC_API_URL=http://localhost:3000
 EXPO_PUBLIC_API_TIMEOUT=30000
 
 # Database (للسيرفر)
-DATABASE_URL=sqlite:./data.db
+DATABASE_URL=http://localhost:3000
 
 # Gemini AI (احصل على المفتاح من https://ai.google.dev)
 GEMINI_API_KEY=your-gemini-api-key-here

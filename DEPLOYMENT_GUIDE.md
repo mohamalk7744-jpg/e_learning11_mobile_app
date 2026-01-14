@@ -73,7 +73,7 @@ EXPO_PUBLIC_API_URL=http://localhost:3000
 EXPO_PUBLIC_API_TIMEOUT=30000
 
 # Database (للسيرفر)
-DATABASE_URL=sqlite:./data.db
+DATABASE_URL=mysql://3pnBLquRto1WXKY.d37829e399e0:FI98bw5a7h1Wbuy2ICbG@gateway02.us-east-1.prod.aws.tidbcloud.com:4000/K2DGTyCZmMizpMnSyggEHE?ssl={"rejectUnauthorized":true}
 
 # Gemini AI
 GEMINI_API_KEY=your-gemini-api-key-here
@@ -96,7 +96,7 @@ NODE_ENV=development
 
 ```typescript
 // تحديث عنوان السيرفر
-export const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+export const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.184.5:3000';
 
 export const trpc = createTRPCReact<AppRouter>();
 
@@ -125,7 +125,7 @@ export const trpcClient = trpc.createClient({
 const PORT = process.env.PORT || 3000;
 
 // تحديث قاعدة البيانات
-const dbPath = process.env.DATABASE_URL || 'sqlite:./data.db';
+const dbPath = process.env.DATABASE_URL || 'mysql://root:TVTdqyvaFYOsgPkSBFhtfoMJlSTLNhNl@shinkansen.proxy.rlwy.net:38178/railway';
 
 // تحديث مفتاح Gemini
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
