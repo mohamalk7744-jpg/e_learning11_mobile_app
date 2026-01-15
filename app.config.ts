@@ -11,11 +11,9 @@ const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
-  // App branding - update these values directly (do not use env vars)
+  // App branding
   appName: 'تطبيق التعلم عن بعد',
   appSlug: 'e_learning_mobile_app',
-  // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
-  // Leave empty to use the default icon from assets/images/icon.png
   logoUrl: '',
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
@@ -25,7 +23,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.0",
+  version: "1.0.1",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -39,6 +37,7 @@ const config: ExpoConfig = {
     },
   },
   android: {
+    versionCode: 2,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
       foregroundImage: "./assets/images/android-icon-foreground.png",
@@ -86,6 +85,12 @@ const config: ExpoConfig = {
     typedRoutes: true,
     reactCompiler: true,
   },
+  // <<< إضافة EAS Project ID هنا
+  extra: {
+    eas: {
+      projectId: "0542859f-4287-49c2-b2d8-813c3c8d405e"
+    }
+  }
 };
 
 export default config;
