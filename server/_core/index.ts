@@ -30,7 +30,7 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Enable CORS for all routes - reflect the request origin to support credentials
+  // Enable CORS
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
@@ -43,7 +43,6 @@ async function startServer() {
     );
     res.header("Access-Control-Allow-Credentials", "true");
 
-    // Handle preflight requests
     if (req.method === "OPTIONS") {
       res.sendStatus(200);
       return;
@@ -53,6 +52,11 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Root route for testing
+  app.get("/", (_req, res) => {
+    res.json({ message: "E-Learning API Server is running", status: "ok" });
+  });
 
   registerOAuthRoutes(app);
 
@@ -68,6 +72,14 @@ async function startServer() {
     }),
   );
 
+  // Fallback for unknown routes to return JSON instead of HTML
+  app.use((req, res) => {
+    res.status(404).json({
+      error: "Not Found",
+      message: `Cannot ${req.method} ${req.path}`,
+    });
+  });
+
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
 
@@ -75,8 +87,10 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
+  server.listen(port, "0.0.0.0", () => {
     console.log(`[api] server listening on port ${port}`);
+    console.log(`[api] local access: http://localhost:${port}`);
+    console.log(`[api] network access: http://10.0.184.5:${port}`);
   });
 }
 
