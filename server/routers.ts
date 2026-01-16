@@ -6,9 +6,11 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
 import * as authService from "./auth-service";
 import { seedRouter } from "./seed-router";
+import { sdk } from "./_core/sdk";
+import { askGemini } from "./services/gemini";
+import { storagePut } from "./storage";
 
 export const appRouter = router({
-  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   seed: seedRouter,
   auth: router({
@@ -20,7 +22,6 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
-    // API جديدة للتحقق من تسجيل الدخول
     login: publicProcedure
       .input(
         z.object({
@@ -31,8 +32,13 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         try {
           const user = await authService.authenticateUser(input.email, input.password);
+          const token = await sdk.createSessionToken(user.openId, {
+            name: user.name || "",
+          });
+
           return {
             success: true,
+            token,
             user: {
               id: user.id,
               openId: user.openId,
@@ -50,8 +56,27 @@ export const appRouter = router({
       }),
   }),
 
+  storage: router({
+    upload: protectedProcedure
+      .input(z.object({
+        base64: z.string(),
+        fileName: z.string(),
+        contentType: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const buffer = Buffer.from(input.base64, 'base64');
+        const { url } = await storagePut(input.fileName, buffer, input.contentType);
+        return { url };
+      }),
+  }),
+
+  users: router({
+    listStudents: protectedProcedure.query(() => db.getStudents()),
+  }),
+
   subjects: router({
     list: protectedProcedure.query(() => db.getSubjects()),
+    listMySubjects: protectedProcedure.query(({ ctx }) => db.getStudentSubjects(ctx.user.id)),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(({ input }) => db.getSubjectById(input.id)),
@@ -61,6 +86,7 @@ export const appRouter = router({
           name: z.string().min(1),
           description: z.string().optional(),
           numberOfDays: z.number().default(30),
+          curriculum: z.string().optional(),
         })
       )
       .mutation(({ ctx, input }) =>
@@ -68,6 +94,7 @@ export const appRouter = router({
           name: input.name,
           description: input.description,
           numberOfDays: input.numberOfDays,
+          curriculum: input.curriculum,
           createdBy: ctx.user.id,
         })
       ),
@@ -78,12 +105,26 @@ export const appRouter = router({
           name: z.string().optional(),
           description: z.string().optional(),
           numberOfDays: z.number().optional(),
+          curriculum: z.string().optional(),
         })
       )
       .mutation(({ input }) => db.updateSubject(input.id, input)),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => db.deleteSubject(input.id)),
+    
+    listPermissions: protectedProcedure.query(() => db.getPermissions()),
+    grantAccess: protectedProcedure
+      .input(z.object({ studentId: z.number(), subjectId: z.number() }))
+      .mutation(({ ctx, input }) => db.createAccessPermission({
+        studentId: input.studentId,
+        subjectId: input.subjectId,
+        hasAccess: 1,
+        createdBy: ctx.user.id
+      })),
+    revokeAccess: protectedProcedure
+      .input(z.object({ studentId: z.number(), subjectId: z.number() }))
+      .mutation(({ input }) => db.deleteAccessPermission(input.studentId, input.subjectId)),
   }),
 
   lessons: router({
@@ -133,9 +174,155 @@ export const appRouter = router({
     listBySubject: protectedProcedure
       .input(z.object({ subjectId: z.number() }))
       .query(({ input }) => db.getQuizzesBySubject(input.subjectId)),
+    listBySubjectAndType: protectedProcedure
+      .input(z.object({ subjectId: z.number(), type: z.string() }))
+      .query(({ input }) => db.getQuizzesBySubjectAndType(input.subjectId, input.type)),
+    listByDay: protectedProcedure
+      .input(z.object({ subjectId: z.number(), dayNumber: z.number() }))
+      .query(({ input }) => db.getQuizzesBySubjectAndDay(input.subjectId, input.dayNumber)),
+    listAll: protectedProcedure.query(() => db.getAllQuizzes()),
+    listExams: protectedProcedure.query(() => db.getNonDailyQuizzes()),
+    getDailyForLesson: protectedProcedure
+      .input(z.object({ subjectId: z.number(), dayNumber: z.number() }))
+      .query(({ input }) => db.getDailyQuizByLesson(input.subjectId, input.dayNumber)),
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .query(({ input }) => db.getQuizById(input.id)),
+      .query(({ input }) => db.getFullQuiz(input.id)),
+    
+    // الحصول على الاختبارات مع حالة الطالب
+    getExamsWithStatus: protectedProcedure
+      .input(z.object({ quizIds: z.array(z.number()) }))
+      .query(({ ctx, input }) => db.getStudentQuizAttempts(ctx.user.id, input.quizIds)),
+    
+    listSubmissions: protectedProcedure.query(() => db.getAllSubmissions()),
+    getQuizSubmissions: protectedProcedure
+      .input(z.object({ quizId: z.number() }))
+      .query(({ input }) => db.getSubmissionsByQuiz(input.quizId)),
+    
+    getSubmissionDetails: protectedProcedure
+      .input(z.object({ studentId: z.number(), quizId: z.number() }))
+      .query(({ input }) => db.getDetailedSubmission(input.studentId, input.quizId)),
+
+    gradeAnswer: protectedProcedure
+      .input(z.object({
+        answerId: z.number(),
+        score: z.number(),
+        feedback: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateStudentAnswer(input.answerId, {
+          score: input.score,
+          feedback: input.feedback,
+          gradedAt: new Date(),
+          gradedBy: ctx.user.id
+        });
+        return { success: true };
+      }),
+
+    updateQuizModelAnswer: protectedProcedure
+      .input(z.object({
+        quizId: z.number(),
+        modelAnswerText: z.string().optional(),
+        modelAnswerImageUrl: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.updateQuiz(input.quizId, {
+          modelAnswerText: input.modelAnswerText,
+          modelAnswerImageUrl: input.modelAnswerImageUrl,
+        });
+        return { success: true };
+      }),
+
+    publishResults: protectedProcedure
+      .input(z.object({ quizId: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.updateQuiz(input.quizId, {
+          resultsPublished: 1
+        });
+        return { success: true };
+      }),
+
+    submit: protectedProcedure
+      .input(z.object({
+        quizId: z.number(),
+        answers: z.array(z.object({
+          questionId: z.number(),
+          selectedOptionId: z.number().optional(),
+          textAnswer: z.string().optional(),
+          imageUrl: z.string().optional(),
+        }))
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const fullQuiz = await db.getFullQuiz(input.quizId);
+        if (!fullQuiz) throw new Error("Quiz not found");
+
+        let correctAnswers = 0;
+        let isAutoGradable = true;
+
+        for (const answer of input.answers) {
+          const question = fullQuiz.questions.find(q => q.id === answer.questionId);
+          let score = null;
+
+          if (question?.questionType === "multiple_choice") {
+            const correctOption = question.options.find(o => o.isCorrect === 1);
+            if (correctOption && correctOption.id === answer.selectedOptionId) {
+              correctAnswers++;
+              score = 1;
+            } else {
+              score = 0;
+            }
+          } else {
+            isAutoGradable = false;
+          }
+
+          await db.createStudentAnswer({
+            quizId: input.quizId,
+            studentId: ctx.user.id,
+            questionId: answer.questionId,
+            selectedOptionId: answer.selectedOptionId,
+            textAnswer: answer.textAnswer,
+            imageUrl: answer.imageUrl,
+            score: score
+          });
+        }
+
+        const quizType = fullQuiz.type;
+        if (isAutoGradable && quizType === "daily") {
+          const totalQuestions = fullQuiz.questions.length;
+          const finalScore = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+          return {
+            score: finalScore,
+            totalQuestions,
+            correctAnswers,
+            status: "graded"
+          };
+        }
+
+        return {
+          status: "pending_manual_grading"
+        };
+      }),
+
+    getUserResults: protectedProcedure
+      .input(z.object({ quizId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const quiz = await db.getQuizById(input.quizId);
+        if (!quiz) return null;
+        
+        // Only return results if they are published (for monthly/semester) or if it's a daily quiz
+        if (quiz.type !== "daily" && quiz.resultsPublished === 0) {
+          return { status: "not_published" };
+        }
+
+        const answers = await db.getStudentAnswers(ctx.user.id, input.quizId);
+        return { 
+          status: "published",
+          answers,
+          modelAnswerText: quiz.modelAnswerText,
+          modelAnswerImageUrl: quiz.modelAnswerImageUrl
+        };
+      }),
+    
     create: protectedProcedure
       .input(
         z.object({
@@ -144,32 +331,53 @@ export const appRouter = router({
           description: z.string().optional(),
           type: z.enum(["daily", "monthly", "semester"]),
           dayNumber: z.number().optional(),
-          scheduledDate: z.date().optional(),
+          questions: z.array(z.object({
+            question: z.string(),
+            questionType: z.enum(["multiple_choice", "short_answer", "essay"]),
+            correctAnswerText: z.string().optional(),
+            correctAnswerImageUrl: z.string().optional(),
+            options: z.array(z.object({
+              text: z.string(),
+              isCorrect: z.boolean(),
+            })).optional(),
+          })).optional(),
         })
       )
-      .mutation(({ ctx, input }) =>
-        db.createQuiz({
+      .mutation(async ({ ctx, input }) => {
+        const quizId = await db.createQuiz({
           subjectId: input.subjectId,
           title: input.title,
           description: input.description,
           type: input.type,
           dayNumber: input.dayNumber,
-          scheduledDate: input.scheduledDate,
           createdBy: ctx.user.id,
-        })
-      ),
-    update: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          title: z.string().optional(),
-          description: z.string().optional(),
-          type: z.enum(["daily", "monthly", "semester"]).optional(),
-          dayNumber: z.number().optional(),
-          scheduledDate: z.date().optional(),
-        })
-      )
-      .mutation(({ input }) => db.updateQuiz(input.id, input)),
+        });
+
+        if (input.questions) {
+          for (const [qIdx, q] of input.questions.entries()) {
+            const questionId = await db.createQuizQuestion({
+              quizId: Number(quizId),
+              question: q.question,
+              questionType: q.questionType,
+              correctAnswerText: q.correctAnswerText,
+              correctAnswerImageUrl: q.correctAnswerImageUrl,
+              order: qIdx + 1,
+            });
+
+            if (q.questionType === "multiple_choice" && q.options) {
+              for (const [oIdx, opt] of q.options.entries()) {
+                await db.createQuizOption({
+                  questionId: Number(questionId),
+                  text: opt.text,
+                  isCorrect: opt.isCorrect ? 1 : 0,
+                  order: oIdx + 1,
+                });
+              }
+            }
+          }
+        }
+        return { quizId };
+      }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => db.deleteQuiz(input.id)),
@@ -219,179 +427,61 @@ export const appRouter = router({
       .mutation(({ input }) => db.deleteDiscount(input.id)),
   }),
 
-  accessPermissions: router({
-    getStudentAccess: protectedProcedure
-      .input(z.object({ studentId: z.number(), subjectId: z.number() }))
-      .query(({ input }) =>
-        db.getStudentSubjectAccess(input.studentId, input.subjectId)
-      ),
-    create: protectedProcedure
-      .input(
-        z.object({
-          studentId: z.number(),
-          subjectId: z.number(),
-          hasAccess: z.number().default(1),
-          startDate: z.date().optional(),
-          endDate: z.date().optional(),
-        })
-      )
-      .mutation(({ ctx, input }) =>
-        db.createAccessPermission({
-          studentId: input.studentId,
-          subjectId: input.subjectId,
-          hasAccess: input.hasAccess,
-          startDate: input.startDate,
-          endDate: input.endDate,
-          createdBy: ctx.user.id,
-        })
-      ),
-    update: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          hasAccess: z.number().optional(),
-          startDate: z.date().optional(),
-          endDate: z.date().optional(),
-        })
-      )
-      .mutation(({ input }) => db.updateAccessPermission(input.id, input)),
-  }),
-
-  studentProgress: router({
-    getProgress: protectedProcedure
-      .input(z.object({ studentId: z.number(), subjectId: z.number() }))
-      .query(({ input }) =>
-        db.getStudentProgress(input.studentId, input.subjectId)
-      ),
-    markLessonComplete: protectedProcedure
-      .input(
-        z.object({
-          studentId: z.number(),
-          subjectId: z.number(),
-          lessonId: z.number(),
-        })
-      )
-      .mutation(({ input }) =>
-        db.createStudentProgress({
-          studentId: input.studentId,
-          subjectId: input.subjectId,
-          lessonId: input.lessonId,
-          isCompleted: 1,
-          completedAt: new Date(),
-        })
-      ),
-  }),
-
-  chat: router({
-    getHistory: protectedProcedure
-      .input(z.object({ studentId: z.number(), subjectId: z.number() }))
-      .query(({ input }) =>
-        db.getChatHistory(input.studentId, input.subjectId)
-      ),
-    sendMessage: protectedProcedure
-      .input(
-        z.object({
-          studentId: z.number(),
-          subjectId: z.number(),
-          question: z.string().min(1),
-          answer: z.string().min(1),
-        })
-      )
-      .mutation(({ input }) =>
-        db.createChatMessage({
-          studentId: input.studentId,
-          subjectId: input.subjectId,
-          question: input.question,
-          answer: input.answer,
-        })
-      ),
-    ask: protectedProcedure
-      .input(
-        z.object({
-          question: z.string().min(1),
-          curriculum: z.string().optional(),
-        })
-      )
-      .mutation(async ({ input }) => {
-        const { askGemini } = await import("./services/gemini");
-        const answer = await askGemini(input.question, input.curriculum);
-        return { answer };
-      }),
-  }),
-
   notifications: router({
     getUserNotifications: protectedProcedure
       .input(z.object({ userId: z.number() }))
       .query(({ input }) => db.getUserNotifications(input.userId)),
-    create: protectedProcedure
-      .input(
-        z.object({
-          userId: z.number(),
-          title: z.string().min(1),
-          message: z.string().min(1),
-          type: z.enum(["lesson", "quiz", "discount", "grade", "general"]),
-          relatedId: z.number().optional(),
-        })
-      )
-      .mutation(({ input }) =>
-        db.createNotification({
-          userId: input.userId,
-          title: input.title,
-          message: input.message,
-          type: input.type,
-          relatedId: input.relatedId,
-          isRead: 0,
-        })
-      ),
     markAsRead: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(({ input }) => db.markNotificationAsRead(input.id)),
   }),
 
-  studentAnswers: router({
-    getAnswers: protectedProcedure
-      .input(z.object({ studentId: z.number(), quizId: z.number() }))
-      .query(({ input }) =>
-        db.getStudentAnswers(input.studentId, input.quizId)
-      ),
-    submitAnswer: protectedProcedure
-      .input(
-        z.object({
-          quizId: z.number(),
-          studentId: z.number(),
-          questionId: z.number(),
-          selectedOptionId: z.number().optional(),
-          textAnswer: z.string().optional(),
-          imageUrl: z.string().optional(),
-        })
-      )
-      .mutation(({ input }) =>
-        db.createStudentAnswer({
-          quizId: input.quizId,
-          studentId: input.studentId,
-          questionId: input.questionId,
-          selectedOptionId: input.selectedOptionId,
-          textAnswer: input.textAnswer,
-          imageUrl: input.imageUrl,
-          submittedAt: new Date(),
-        })
-      ),
-    gradeAnswer: protectedProcedure
-      .input(
-        z.object({
-          id: z.number(),
-          score: z.number(),
-          feedback: z.string().optional(),
-        })
-      )
-      .mutation(({ ctx, input }) =>
-        db.updateStudentAnswer(input.id, {
-          score: input.score,
-          feedback: input.feedback,
-          gradedAt: new Date(),
-          gradedBy: ctx.user.id,
-        })
-      ),
+  chat: router({
+    ask: protectedProcedure
+      .input(z.object({
+        subjectId: z.number(),
+        question: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const access = await db.getStudentSubjectAccess(ctx.user.id, input.subjectId);
+        if (!access || access.hasAccess === 0) {
+          return {
+            answer: "عذراً، لا تملك صلاحية الوصول لهذا المنهج. يرجى الاشتراك في المادة أولاً لتتمكن من سؤال البوت عنها.",
+            success: false
+          };
+        }
+
+        const subject = await db.getSubjectById(input.subjectId);
+        if (!subject || !subject.curriculum) {
+          return {
+            answer: "عذراً، لم يتم رفع المنهاج لهذه المادة بعد. سأكون جاهزاً للرد قريباً!",
+            success: false
+          };
+        }
+
+        try {
+          const answer = await askGemini(input.question, subject.curriculum);
+
+          await db.createChatMessage({
+            studentId: ctx.user.id,
+            subjectId: input.subjectId,
+            question: input.question,
+            answer: answer,
+          });
+
+          return {
+            answer,
+            success: true
+          };
+        } catch (error) {
+          console.error("Chat error:", error);
+          return {
+            answer: "عذراً، حدث خطأ أثناء محاولة الحصول على إجابة من البوت الذكي. يرجى المحاولة لاحقاً.",
+            success: false
+          };
+        }
+      }),
   }),
 });
+
 export type AppRouter = typeof appRouter;
