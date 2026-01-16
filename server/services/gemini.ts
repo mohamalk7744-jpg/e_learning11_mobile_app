@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -6,7 +6,7 @@ if (!apiKey) {
   throw new Error("GEMINI_API_KEY environment variable is not set");
 }
 
-const client = new GoogleGenerativeAI(apiKey);
+const client = new GoogleGenAI(apiKey);
 
 export async function askGemini(question: string, curriculum: string = ""): Promise<string> {
   try {
