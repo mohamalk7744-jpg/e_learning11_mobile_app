@@ -1,6 +1,6 @@
 export const ENV = {
   appId: process.env.VITE_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? "",
+  cookieSecret: process.env.JWT_SECRET ?? "agKJdfdgjklsjkgsfgjaslkdslaksdljf",
   databaseUrl: process.env.DATABASE_URL ?? "mysql://root:iHXYhlQNDhQycMrxxIAWCZLuYmEAZktq@gondola.proxy.rlwy.net:45588/railway",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "https://e-learning11-mobile-app.onrender.com",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
