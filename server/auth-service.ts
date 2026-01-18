@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { users } from "../drizzle/schema";
-import { getDb } from "./db";
+import { getDb, upsertUser } from "./db";
 
 /**
  * التحقق من بيانات تسجيل الدخول وإرجاع بيانات المستخدم مع الدور
@@ -78,7 +78,7 @@ export async function getUserRole(userId: number) {
 }
 
 /**
- * إنشاء مستخدم جديد
+ * إنشاء مستخدم جديد أو تحديثه إذا كان موجوداً
  */
 export async function createUser(data: {
   openId: string;
@@ -86,12 +86,7 @@ export async function createUser(data: {
   name?: string;
   role?: "user" | "admin";
 }) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-
-  await db.insert(users).values({
+  await upsertUser({
     openId: data.openId,
     email: data.email,
     name: data.name,

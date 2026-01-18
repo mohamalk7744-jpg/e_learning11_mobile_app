@@ -1,16 +1,12 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { trpc } from "@/lib/trpc";
 
 export default function DiscountsScreen() {
   const insets = useSafeAreaInsets();
-
-  const discounts = [
-    { id: 1, company: "مدرسة النور", discount: "30%", description: "خصم على الدورات الصيفية", type: "percentage" },
-    { id: 2, company: "معهد اللغات", discount: "500 ريال", description: "خصم على برامج اللغة الإنجليزية", type: "fixed" },
-    { id: 3, company: "مركز الرياضيات", discount: "25%", description: "خصم على الحصص الخصوصية", type: "percentage" },
-  ];
+  const { data: discounts, isLoading } = trpc.discounts.list.useQuery();
 
   const handleUseDiscount = (company: string, discount: string) => {
     Alert.alert(
@@ -38,51 +34,62 @@ export default function DiscountsScreen() {
     >
       <ThemedView style={styles.header}>
         <ThemedText type="title">العروض والحسومات</ThemedText>
-        <ThemedText type="default" style={styles.subtitle}>استفد من عروضنا الخاصة</ThemedText>
+        <ThemedText type="default" style={styles.subtitle}>استفد من عروضنا الخاصة والحصرية</ThemedText>
       </ThemedView>
 
-      <View style={styles.discountsContainer}>
-        {discounts.map((discount) => (
-          <Pressable 
-            key={discount.id}
-            style={({ pressed }) => [
-              styles.discountCard,
-              pressed && styles.discountCardPressed
-            ]}
-          >
-            <View style={styles.discountHeader}>
-              <View>
-                <ThemedText type="defaultSemiBold" style={styles.company}>
-                  {discount.company}
-                </ThemedText>
-                <ThemedText type="default" style={styles.description}>
-                  {discount.description}
-                </ThemedText>
-              </View>
-              <View style={[
-                styles.badgeContainer,
-                discount.type === "percentage" ? styles.percentageBadge : styles.fixedBadge
-              ]}>
-                <ThemedText style={styles.badgeText}>
-                  {discount.discount}
-                </ThemedText>
-              </View>
-            </View>
+      {isLoading ? (
+        <ActivityIndicator size="large" color="#FF9500" style={{ marginTop: 40 }} />
+      ) : (
+        <View style={styles.discountsContainer}>
+          {discounts?.map((discount) => (
             <Pressable 
-              style={styles.useButton}
-              onPress={() => handleUseDiscount(discount.company, discount.discount)}
+              key={discount.id}
+              style={({ pressed }) => [
+                styles.discountCard,
+                pressed && styles.discountCardPressed
+              ]}
+              onPress={() => handleUseDiscount(
+                discount.company, 
+                `${discount.discountValue}${discount.discountType === "percentage" ? "%" : " ريال"}`
+              )}
             >
-              <ThemedText style={styles.useButtonText}>استخدم الآن</ThemedText>
+              <View style={styles.discountHeader}>
+                <View style={styles.textContainer}>
+                  <ThemedText type="defaultSemiBold" style={styles.company}>
+                    {discount.company}
+                  </ThemedText>
+                  <ThemedText type="default" style={styles.description}>
+                    {discount.description || discount.title}
+                  </ThemedText>
+                </View>
+                <View style={[
+                  styles.badgeContainer,
+                  discount.discountType === "percentage" ? styles.percentageBadge : styles.fixedBadge
+                ]}>
+                  <ThemedText style={styles.badgeText}>
+                    {discount.discountValue}{discount.discountType === "percentage" ? "%" : " ريال"}
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.useButton}>
+                <ThemedText style={styles.useButtonText}>استخدم الآن</ThemedText>
+              </View>
             </Pressable>
-          </Pressable>
-        ))}
-      </View>
+          ))}
+
+          {discounts?.length === 0 && (
+            <View style={styles.emptyContainer}>
+              <ThemedText style={styles.emptyText}>لا توجد عروض متوفرة حالياً</ThemedText>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Info Section */}
       <ThemedView style={styles.infoSection}>
-        <ThemedText type="subtitle" style={styles.infoTitle}>💡 معلومة</ThemedText>
+        <ThemedText type="subtitle" style={styles.infoTitle}>💡 معلومة للطلاب</ThemedText>
         <ThemedText type="default" style={styles.infoText}>
-          جميع العروض المعروضة حصرية لطلابنا. يمكنك استخدام الحسومات مباشرة من خلال الضغط على "استخدم الآن".
+          جميع العروض المعروضة حصرية لطلاب منصتنا. يمكنك المطالبة بالحسم مباشرة عند زيارة المركز أو المعهد وتفعيل العرض من هاتفك.
         </ThemedText>
       </ThemedView>
     </ScrollView>
@@ -92,16 +99,19 @@ export default function DiscountsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#fff",
   },
   header: {
     paddingHorizontal: 16,
     paddingVertical: 20,
-    marginBottom: 16,
+    marginBottom: 8,
+    alignItems: "flex-end",
   },
   subtitle: {
     fontSize: 14,
     opacity: 0.7,
     marginTop: 4,
+    textAlign: "right",
   },
   discountsContainer: {
     paddingHorizontal: 16,
@@ -110,32 +120,41 @@ const styles = StyleSheet.create({
   },
   discountCard: {
     padding: 16,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 149, 0, 0.08)",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF9500",
+    borderRadius: 16,
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#EEE",
     gap: 12,
   },
   discountCardPressed: {
-    opacity: 0.7,
+    opacity: 0.8,
+    backgroundColor: "#F0F0F0",
   },
   discountHeader: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+  },
+  textContainer: {
+    flex: 1,
+    alignItems: "flex-end",
+    paddingLeft: 12,
   },
   company: {
-    fontSize: 16,
-    marginBottom: 4,
+    fontSize: 18,
+    marginBottom: 2,
+    color: "#000",
   },
   description: {
     fontSize: 13,
-    opacity: 0.7,
+    color: "#666",
+    textAlign: "right",
   },
   badgeContainer: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    minWidth: 80,
     alignItems: "center",
   },
   percentageBadge: {
@@ -146,34 +165,46 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "bold",
   },
   useButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#FF9500",
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#000",
     alignItems: "center",
+    marginTop: 4,
   },
   useButtonText: {
     color: "#fff",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "bold",
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: "#999",
   },
   infoSection: {
     marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "rgba(52, 199, 89, 0.08)",
+    marginBottom: 32,
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#E0F2FE",
   },
   infoTitle: {
     marginBottom: 8,
+    textAlign: "right",
+    color: "#0369A1",
   },
   infoText: {
     fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.8,
+    lineHeight: 22,
+    color: "#0C4A6E",
+    textAlign: "right",
   },
 });

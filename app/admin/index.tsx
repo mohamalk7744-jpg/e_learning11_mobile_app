@@ -1,32 +1,41 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Link } from "expo-router";
-import { ScrollView, StyleSheet, Pressable } from "react-native";
+import { ScrollView, StyleSheet, Pressable, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function AdminDashboard() {
   const adminOptions = [
-    { title: "Manage Subjects", href: "/admin/subjects" },
-    { title: "Manage Lessons", href: "/admin/lessons" },
-    { title: "Manage Quizzes", href: "/admin/quizzes" },
-    { title: "Manage Discounts", href: "/admin/discounts" },
+    { title: "إدارة المواد الدراسية", href: "/admin/subjects", icon: "book-outline", color: "#3B82F6" },
+    { title: "إدارة الدروس", href: "/admin/lessons", icon: "reader-outline", color: "#10B981" },
+    { title: "إدارة الاختبارات", href: "/admin/quizzes", icon: "help-circle-outline", color: "#F59E0B" },
+    { title: "إدارة المناهج (البوت)", href: "/admin/curriculum", icon: "chatbubbles-outline", color: "#6366F1" },
+    { title: "نتائج واختبارات الطلاب", href: "/admin/results", icon: "stats-chart-outline", color: "#8B5CF6" },
+    { title: "إدارة صلاحيات الطلاب", href: "/admin/permissions", icon: "people-outline", color: "#EF4444" },
+    { title: "إدارة الخصومات", href: "/admin/discounts", icon: "pricetag-outline", color: "#EC4899" },
   ];
 
   return (
     <ScrollView style={styles.container}>
       <ThemedView style={styles.header}>
-        <ThemedText type="title">Admin Dashboard</ThemedText>
-        <ThemedText type="default">Manage your courses and content</ThemedText>
+        <ThemedText type="title" style={styles.headerTitle}>لوحة التحكم</ThemedText>
+        <ThemedText type="default" style={styles.headerSub}>مرحباً بك، يمكنك إدارة كافة محتويات التطبيق من هنا</ThemedText>
       </ThemedView>
 
       <ThemedView style={styles.optionsContainer}>
         {adminOptions.map((option, index) => (
           <Link key={index} href={option.href as any} asChild>
             <Pressable style={styles.optionButton}>
-              <ThemedText type="defaultSemiBold">{option.title}</ThemedText>
+              <View style={[styles.iconContainer, { backgroundColor: option.color + '15' }]}>
+                <Ionicons name={option.icon as any} size={24} color={option.color} />
+              </View>
+              <ThemedText type="defaultSemiBold" style={styles.optionText}>{option.title}</ThemedText>
+              <Ionicons name="chevron-back-outline" size={20} color="#9CA3AF" />
             </Pressable>
           </Link>
         ))}
       </ThemedView>
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
@@ -34,20 +43,57 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    backgroundColor: '#F9FAFB',
   },
   header: {
-    marginBottom: 24,
+    padding: 24,
+    paddingTop: 40,
+    backgroundColor: '#fff',
+    alignItems: 'flex-end',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 28,
+    color: '#111827',
+  },
+  headerSub: {
+    color: '#6B7280',
+    marginTop: 4,
+    textAlign: 'right',
   },
   optionsContainer: {
+    paddingHorizontal: 16,
     gap: 12,
+    backgroundColor: 'transparent',
   },
   optionButton: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
     padding: 16,
-    backgroundColor: "#007AFF",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 60,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  optionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    textAlign: 'right',
+  }
 });

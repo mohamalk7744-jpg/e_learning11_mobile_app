@@ -47,7 +47,14 @@ export default function LoginScreen() {
         };
         
         await Auth.setUserInfo(userInfo);
-        await Auth.setSessionToken('session_' + Date.now());
+        
+        // حفظ التوكن الحقيقي المرسل من السيرفر
+        if (result.token) {
+          await Auth.setSessionToken(result.token);
+        } else {
+          // Fallback if no token (should not happen with new API)
+          await Auth.setSessionToken('session_' + Date.now());
+        }
 
         // التوجيه حسب دور المستخدم
         setTimeout(() => {

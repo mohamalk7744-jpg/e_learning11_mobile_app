@@ -74,7 +74,7 @@ export default function SetupScreen() {
 
         <Pressable
           style={styles.skipButton}
-          onPress={() => router.replace('/(tabs)')}
+          onPress={() => router.replace('/admin')}
           disabled={loading}
         >
           <ThemedText style={styles.skipText}>

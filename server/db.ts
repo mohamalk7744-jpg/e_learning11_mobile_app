@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and, ne, inArray, or, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -116,6 +116,12 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getStudents() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).where(eq(users.role, "user"));
+}
+
 // ==================== Subjects ====================
 export async function createSubject(data: InsertSubject) {
   const db = await getDb();
@@ -127,6 +133,23 @@ export async function getSubjects() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(subjects);
+}
+
+export async function getStudentSubjects(studentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get subject IDs that the student has access to
+  const permissions = await db
+    .select({ subjectId: accessPermissions.subjectId })
+    .from(accessPermissions)
+    .where(and(eq(accessPermissions.studentId, studentId), eq(accessPermissions.hasAccess, 1)));
+    
+  if (permissions.length === 0) return [];
+  
+  const subjectIds = permissions.map(p => p.subjectId);
+  
+  return db.select().from(subjects).where(inArray(subjects.id, subjectIds));
 }
 
 export async function getSubjectById(id: number) {
@@ -158,7 +181,7 @@ export async function createLesson(data: InsertLesson) {
 export async function getLessonsBySubject(subjectId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(lessons).where(eq(lessons.subjectId, subjectId));
+  return db.select().from(lessons).where(eq(lessons.subjectId, subjectId)).orderBy(lessons.dayNumber);
 }
 
 export async function getLessonById(id: number) {
@@ -184,7 +207,8 @@ export async function deleteLesson(id: number) {
 export async function createQuiz(data: InsertQuiz) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(quizzes).values(data);
+  const [result] = await db.insert(quizzes).values(data);
+  return result.insertId;
 }
 
 export async function getQuizzesBySubject(subjectId: number) {
@@ -193,11 +217,77 @@ export async function getQuizzesBySubject(subjectId: number) {
   return db.select().from(quizzes).where(eq(quizzes.subjectId, subjectId));
 }
 
+export async function getQuizzesBySubjectAndType(subjectId: number, type: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(quizzes).where(and(eq(quizzes.subjectId, subjectId), eq(quizzes.type, type)));
+}
+
+export async function getAllQuizzes() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(quizzes);
+}
+
+export async function getNonDailyQuizzes() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(quizzes).where(ne(quizzes.type, "daily"));
+}
+
+export async function getDailyQuizByLesson(subjectId: number, dayNumber: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(quizzes)
+    .where(and(
+      eq(quizzes.subjectId, subjectId),
+      eq(quizzes.type, "daily"),
+      eq(quizzes.dayNumber, dayNumber)
+    ))
+    .limit(1);
+    
+  if (result.length === 0) return null;
+  
+  return getFullQuiz(Number(result[0].id));
+}
+
+// New function to get ALL quizzes for a specific subject and day
+export async function getQuizzesBySubjectAndDay(subjectId: number, dayNumber: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(quizzes)
+    .where(and(
+      eq(quizzes.subjectId, subjectId),
+      eq(quizzes.dayNumber, dayNumber)
+    ));
+}
+
 export async function getQuizById(id: number) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.select().from(quizzes).where(eq(quizzes.id, id)).limit(1);
   return result.length > 0 ? result[0] : null;
+}
+
+export async function getFullQuiz(quizId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const quiz = await getQuizById(quizId);
+  if (!quiz) return null;
+
+  const questions = await db.select().from(quizQuestions).where(eq(quizQuestions.quizId, quizId));
+  
+  const questionsWithOptions = await Promise.all(questions.map(async (q) => {
+    const options = await db.select().from(quizOptions).where(eq(quizOptions.questionId, q.id));
+    return { ...q, options };
+  }));
+
+  return { ...quiz, questions: questionsWithOptions };
 }
 
 export async function updateQuiz(id: number, data: Partial<InsertQuiz>) {
@@ -212,125 +302,43 @@ export async function deleteQuiz(id: number) {
   await db.delete(quizzes).where(eq(quizzes.id, id));
 }
 
-export async function getQuizzesBySubjectAndType(subjectId: number, type: "daily" | "monthly" | "semester") {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(quizzes)
-    .where(eq(quizzes.subjectId, subjectId) && eq(quizzes.type, type));
-}
-
-export async function getQuizzesBySubjectAndDay(subjectId: number, dayNumber: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(quizzes)
-    .where(eq(quizzes.subjectId, subjectId) && eq(quizzes.dayNumber, dayNumber));
-}
-
-export async function getAllQuizzes() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(quizzes);
-}
-
-export async function getNonDailyQuizzes() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(quizzes).where(eq(quizzes.type, "monthly") || eq(quizzes.type, "semester"));
-}
-
-export async function getDailyQuizByLesson(subjectId: number, dayNumber: number) {
-  const db = await getDb();
-  if (!db) return null;
-  const result = await db
-    .select()
-    .from(quizzes)
-    .where(
-      eq(quizzes.subjectId, subjectId) &&
-        eq(quizzes.dayNumber, dayNumber) &&
-        eq(quizzes.type, "daily")
-    )
-    .limit(1);
-  return result.length > 0 ? result[0] : null;
-}
-
-export async function getFullQuiz(quizId: number) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const quizResult = await db.select().from(quizzes).where(eq(quizzes.id, quizId)).limit(1);
-  if (quizResult.length === 0) return null;
-
-  const quiz = quizResult[0];
-  const questions = await db
-    .select()
-    .from(quizQuestions)
-    .where(eq(quizQuestions.quizId, quizId));
-
-  const questionsWithOptions = await Promise.all(
-    questions.map(async (q) => {
-      const options = await db
-        .select()
-        .from(quizOptions)
-        .where(eq(quizOptions.questionId, q.id));
-      return { ...q, options };
-    })
-  );
-
-  return { ...quiz, questions: questionsWithOptions };
-}
-
-export async function getStudentQuizAttempts(studentId: number, quizIds: number[]) {
-  const db = await getDb();
-  if (!db) return [];
-  // Simplified: return status for each quiz
-  return Promise.all(
-    quizIds.map(async (id) => {
-      const answers = await db
-        .select()
-        .from(studentAnswers)
-        .where(eq(studentAnswers.quizId, id) && eq(studentAnswers.studentId, studentId))
-        .limit(1);
-      return { quizId: id, attempted: answers.length > 0 };
-    })
-  );
-}
-
-export async function getAllSubmissions() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(studentAnswers);
-}
-
-export async function getSubmissionsByQuiz(quizId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(studentAnswers).where(eq(studentAnswers.quizId, quizId));
-}
-
-export async function getDetailedSubmission(studentId: number, quizId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select()
-    .from(studentAnswers)
-    .where(eq(studentAnswers.quizId, quizId) && eq(studentAnswers.studentId, studentId));
-}
-
+// ==================== Quiz Questions ====================
 export async function createQuizQuestion(data: InsertQuizQuestion) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(quizQuestions).values(data);
-  return result[0].insertId;
+  const [result] = await db.insert(quizQuestions).values(data);
+  return result.insertId;
 }
 
+export async function getQuizQuestions(quizId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(quizQuestions).where(eq(quizQuestions.quizId, quizId));
+}
+
+export async function deleteQuizQuestion(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(quizQuestions).where(eq(quizQuestions.id, id));
+}
+
+// ==================== Quiz Options ====================
 export async function createQuizOption(data: InsertQuizOption) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.insert(quizOptions).values(data);
+}
+
+export async function getQuizOptions(questionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(quizOptions).where(eq(quizOptions.questionId, questionId));
+}
+
+export async function deleteQuizOptionsByQuestionId(questionId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(quizOptions).where(eq(quizOptions.questionId, questionId));
 }
 
 // ==================== Discounts ====================
@@ -358,13 +366,6 @@ export async function deleteDiscount(id: number) {
   await db.delete(discounts).where(eq(discounts.id, id));
 }
 
-// ==================== Users ====================
-export async function getStudents() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(users).where(eq(users.role, "user"));
-}
-
 // ==================== Access Permissions ====================
 export async function createAccessPermission(data: InsertAccessPermission) {
   const db = await getDb();
@@ -378,7 +379,7 @@ export async function getStudentSubjectAccess(studentId: number, subjectId: numb
   const result = await db
     .select()
     .from(accessPermissions)
-    .where(eq(accessPermissions.studentId, studentId) && eq(accessPermissions.subjectId, subjectId))
+    .where(and(eq(accessPermissions.studentId, studentId), eq(accessPermissions.subjectId, subjectId)))
     .limit(1);
   return result.length > 0 ? result[0] : null;
 }
@@ -398,23 +399,7 @@ export async function getPermissions() {
 export async function deleteAccessPermission(studentId: number, subjectId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db
-    .delete(accessPermissions)
-    .where(eq(accessPermissions.studentId, studentId) && eq(accessPermissions.subjectId, subjectId));
-}
-
-export async function getStudentSubjects(studentId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  const permissions = await db
-    .select()
-    .from(accessPermissions)
-    .where(eq(accessPermissions.studentId, studentId) && eq(accessPermissions.hasAccess, 1));
-
-  if (permissions.length === 0) return [];
-
-  const subjectIds = permissions.map((p) => p.subjectId);
-  return db.select().from(subjects).where(eq(subjects.id, subjectIds[0])); // Simplified for now, should use inArray
+  await db.delete(accessPermissions).where(and(eq(accessPermissions.studentId, studentId), eq(accessPermissions.subjectId, subjectId)));
 }
 
 // ==================== Student Progress ====================
@@ -430,7 +415,7 @@ export async function getStudentProgress(studentId: number, subjectId: number) {
   return db
     .select()
     .from(studentProgress)
-    .where(eq(studentProgress.studentId, studentId) && eq(studentProgress.subjectId, subjectId));
+    .where(and(eq(studentProgress.studentId, studentId), eq(studentProgress.subjectId, subjectId)));
 }
 
 export async function updateStudentProgress(id: number, data: Partial<InsertStudentProgress>) {
@@ -452,7 +437,7 @@ export async function getChatHistory(studentId: number, subjectId: number) {
   return db
     .select()
     .from(chatHistory)
-    .where(eq(chatHistory.studentId, studentId) && eq(chatHistory.subjectId, subjectId));
+    .where(and(eq(chatHistory.studentId, studentId), eq(chatHistory.subjectId, subjectId)));
 }
 
 // ==================== Notifications ====================
@@ -487,13 +472,238 @@ export async function getStudentAnswers(studentId: number, quizId: number) {
   return db
     .select()
     .from(studentAnswers)
-    .where(eq(studentAnswers.studentId, studentId) && eq(studentAnswers.quizId, quizId));
+    .where(and(eq(studentAnswers.studentId, studentId), eq(studentAnswers.quizId, quizId)));
+}
+
+export async function getSubmissionsByQuiz(quizId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const answers = await db
+    .select({
+      studentId: studentAnswers.studentId,
+      score: studentAnswers.score,
+      studentName: users.name,
+      submittedAt: studentAnswers.submittedAt,
+    })
+    .from(studentAnswers)
+    .leftJoin(users, eq(studentAnswers.studentId, users.id))
+    .where(eq(studentAnswers.quizId, quizId));
+
+  const attempts = new Map<number, any>();
+  
+  for (const row of answers) {
+    if (!attempts.has(row.studentId)) {
+      attempts.set(row.studentId, {
+        studentId: row.studentId,
+        studentName: row.studentName || "طالب مجهول",
+        submittedAt: row.submittedAt,
+        score: 0,
+        gradedCount: 0,
+        totalQuestions: 0,
+        isGraded: false
+      });
+    }
+    const attempt = attempts.get(row.studentId);
+    attempt.totalQuestions += 1;
+    if (row.submittedAt > attempt.submittedAt) {
+      attempt.submittedAt = row.submittedAt;
+    }
+    // فقط الأسئلة التي تم تصحيحها تحسب درجاتها
+    if (row.score !== null) {
+      attempt.score += (row.score || 0);
+      attempt.gradedCount += 1;
+      attempt.isGraded = true;
+    }
+  }
+
+  return Array.from(attempts.values())
+    .map(a => ({
+      ...a,
+      // حساب النسبة بناءً على الأسئلة المصححة فقط
+      percentage: a.gradedCount > 0 ? Math.round((a.score / a.gradedCount) * 100) : 0
+    }))
+    .sort((a, b) => b.percentage - a.percentage);
+}
+
+export async function getAllSubmissions() {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const allAnswers = await db
+    .select({
+      id: studentAnswers.id,
+      studentId: studentAnswers.studentId,
+      quizId: studentAnswers.quizId,
+      score: studentAnswers.score,
+      submittedAt: studentAnswers.submittedAt,
+      studentName: users.name,
+      quizTitle: quizzes.title,
+    })
+    .from(studentAnswers)
+    .leftJoin(users, eq(studentAnswers.studentId, users.id))
+    .leftJoin(quizzes, eq(studentAnswers.quizId, quizzes.id))
+    .orderBy(desc(studentAnswers.submittedAt));
+
+  const attempts = new Map<string, any>();
+  
+  for (const row of allAnswers) {
+    const key = `${row.studentId}-${row.quizId}`;
+    if (!attempts.has(key)) {
+      attempts.set(key, {
+        id: row.id,
+        studentId: row.studentId,
+        quizId: row.quizId,
+        studentName: row.studentName || "طالب مجهول",
+        quizTitle: row.quizTitle || "اختبار محذوف",
+        submittedAt: row.submittedAt,
+        score: 0,
+        totalQuestions: 0,
+      });
+    }
+    const attempt = attempts.get(key);
+    if (row.score !== null) {
+      attempt.score += (row.score || 0);
+    }
+    attempt.totalQuestions += 1;
+  }
+
+  return Array.from(attempts.values()).map(a => ({
+    ...a,
+    percentage: a.totalQuestions > 0 ? Math.round((a.score / a.totalQuestions) * 100) : 0
+  }));
 }
 
 export async function updateStudentAnswer(id: number, data: Partial<InsertStudentAnswer>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(studentAnswers).set(data).where(eq(studentAnswers.id, id));
+}
+
+export async function getDetailedSubmission(studentId: number, quizId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const answers = await db
+    .select({
+      answerId: studentAnswers.id,
+      questionId: studentAnswers.questionId,
+      question: quizQuestions.question,
+      questionType: quizQuestions.questionType,
+      selectedOptionId: studentAnswers.selectedOptionId,
+      textAnswer: studentAnswers.textAnswer,
+      imageUrl: studentAnswers.imageUrl,
+      score: studentAnswers.score,
+      feedback: studentAnswers.feedback,
+      correctAnswerText: quizQuestions.correctAnswerText,
+      correctAnswerImageUrl: quizQuestions.correctAnswerImageUrl,
+    })
+    .from(studentAnswers)
+    .innerJoin(quizQuestions, eq(studentAnswers.questionId, quizQuestions.id))
+    .where(and(eq(studentAnswers.studentId, studentId), eq(studentAnswers.quizId, quizId)));
+
+  const fullAnswers = await Promise.all(answers.map(async (ans) => {
+    let options = [];
+    if (ans.questionType === "multiple_choice") {
+      options = await db.select().from(quizOptions).where(eq(quizOptions.questionId, ans.questionId));
+    }
+    return { ...ans, options };
+  }));
+
+  return fullAnswers;
+}
+
+// دالة جديدة لحساب الدرجة النهائية للاختبار
+export async function calculateQuizFinalScore(studentId: number, quizId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // جلب جميع إجابات الطالب في هذا الاختبار
+  const answers = await db
+    .select()
+    .from(studentAnswers)
+    .where(and(eq(studentAnswers.studentId, studentId), eq(studentAnswers.quizId, quizId)));
+
+  const quiz = await getQuizById(quizId);
+  if (!quiz) return null;
+
+  const totalQuestions = answers.length;
+  let totalScore = 0;
+  let gradedCount = 0;
+
+  for (const answer of answers) {
+    if (answer.score !== null) {
+      totalScore += answer.score;
+      gradedCount++;
+    }
+  }
+
+  // حساب النسبة المئوية
+  const percentage = gradedCount > 0 ? Math.round((totalScore / gradedCount) * 100) : 0;
+
+  return {
+    totalQuestions,
+    gradedCount,
+    totalScore,
+    percentage,
+    isComplete: gradedCount === totalQuestions
+  };
+}
+
+// دالة جديدة للحصول على حالة الاختبارات للطالب
+export async function getStudentQuizAttempts(studentId: number, quizIds: number[]) {
+  const db = await getDb();
+  if (!db || quizIds.length === 0) return {};
+
+  // جلب جميع إجابات الطالب في هذه الاختبارات
+  const answers = await db
+    .select({
+      quizId: studentAnswers.quizId,
+      score: studentAnswers.score,
+      submittedAt: studentAnswers.submittedAt,
+      gradedAt: studentAnswers.gradedAt,
+    })
+    .from(studentAnswers)
+    .where(and(
+      eq(studentAnswers.studentId, studentId),
+      inArray(studentAnswers.quizId, quizIds)
+    ));
+
+  // تجميع النتائج حسب الاختبار
+  const attempts: Record<number, {
+    hasAttempted: boolean;
+    isGraded: boolean;
+    percentage: number | null;
+    submittedAt: Date | null;
+  }> = {};
+
+  for (const quizId of quizIds) {
+    attempts[quizId] = {
+      hasAttempted: false,
+      isGraded: false,
+      percentage: null,
+      submittedAt: null
+    };
+  }
+
+  for (const answer of answers) {
+    const quizId = answer.quizId;
+    if (!attempts[quizId].hasAttempted) {
+      attempts[quizId].hasAttempted = true;
+      attempts[quizId].submittedAt = answer.submittedAt;
+    }
+    if (answer.gradedAt !== null) {
+      attempts[quizId].isGraded = true;
+    }
+    if (answer.score !== null) {
+      if (attempts[quizId].percentage === null) {
+        attempts[quizId].percentage = 0;
+      }
+      attempts[quizId].percentage = (attempts[quizId].percentage || 0) + answer.score;
+    }
+  }
+
+  return attempts;
 }
 
 // ==================== User Extended ====================

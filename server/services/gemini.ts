@@ -1,88 +1,75 @@
+
 import { GoogleGenAI } from "@google/genai";
+import "dotenv/config";
 
-const apiKey = process.env.GEMINI_API_KEY;
-
-if (!apiKey) {
-  throw new Error("GEMINI_API_KEY environment variable is not set");
-}
-
-const client = new GoogleGenAI(apiKey);
-
+/**
+ * دالة لإرسال سؤال لموديل Gemini والحصول على إجابة تعليمية
+ */
 export async function askGemini(question: string, curriculum: string = ""): Promise<string> {
   try {
-    const model = client.getGenerativeModel({ model: "gemini-pro" });
+    // Correct: Initialize GoogleGenAI using the process.env.API_KEY directly as per guidelines.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    // استخدام موديل Gemini 3 Flash لسرعة الاستجابة وكفاءتها التعليمية
+    const modelName = 'gemini-3-flash-preview';
+    
+    const systemInstruction = curriculum
+      ? `أنت مساعد تعليمي خبير. المنهج الدراسي الحالي هو: ${curriculum}. أجب على أسئلة الطلاب بوضوح وبطريقة تعليمية مبسطة ومباشرة باللغة العربية.`
+      : "أنت مساعد تعليمي خبير. أجب على أسئلة الطلاب بوضوح وبطريقة تعليمية مبسطة باللغة العربية.";
 
-    const systemPrompt = curriculum
-      ? `You are an educational assistant helping students learn from the curriculum: ${curriculum}. Answer questions clearly and educationally in Arabic.`
-      : "You are an educational assistant helping students learn. Answer questions clearly and educationally in Arabic.";
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: question,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 64,
+      },
+    });
 
-    const message = `${systemPrompt}\n\nStudent question: ${question}`;
+    // Correct: Access generated text via the .text property (do not call it as a method).
+    const resultText = response.text;
+    
+    return resultText || "عذراً، لم أستطع توليد إجابة في الوقت الحالي.";
+  } catch (error: any) {
+    console.error("Gemini SDK Error:", error.message);
+    
+    if (error.message?.includes("404")) {
+      throw new Error("الموديل المختار غير متاح حالياً، يرجى مراجعة إعدادات الـ API.");
+    }
+    
+    if (error.message?.includes("API key not valid")) {
+      throw new Error("مفتاح الـ API غير صالح. يرجى التأكد من صلاحية المفتاح في البيئة.");
+    }
 
-    const result = await model.generateContent(message);
-    const response = result.response;
-    const text = response.text();
-
-    return text;
-  } catch (error) {
-    console.error("Gemini API error:", error);
-    throw new Error("Failed to get response from Gemini AI");
+    throw new Error("فشل الاتصال بالذكاء الاصطناعي. يرجى المحاولة بعد قليل.");
   }
 }
 
-export async function generateLessonSummary(
-  lessonContent: string,
-  subject: string
-): Promise<string> {
+/**
+ * دالة لتلخيص محتوى درس تعليمي
+ */
+export async function generateLessonSummary(lessonContent: string, subject: string): Promise<string> {
   try {
-    const model = client.getGenerativeModel({ model: "gemini-pro" });
-
-    const prompt = `Please summarize the following ${subject} lesson in Arabic. Make it concise and educational:
-
-${lessonContent}
-
-Provide a summary in 3-4 paragraphs.`;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-
-    return text;
+    const prompt = `قم بتلخيص محتوى درس "${subject}" التالي باللغة العربية في نقاط مركزة وسهلة الفهم للطلاب:\n\n${lessonContent}`;
+    return await askGemini(prompt);
   } catch (error) {
-    console.error("Gemini API error:", error);
-    throw new Error("Failed to generate lesson summary");
+    console.warn("Summary Generation Failed:", error);
+    return "تعذر إنشاء ملخص آلي حالياً.";
   }
 }
 
-export async function generateQuizQuestions(
-  lessonContent: string,
-  subject: string,
-  count: number = 5
-): Promise<string[]> {
+/**
+ * دالة لتوليد أسئلة اختبار بناءً على محتوى الدرس
+ */
+export async function generateQuizQuestions(lessonContent: string, subject: string, count: number = 5): Promise<string[]> {
   try {
-    const model = client.getGenerativeModel({ model: "gemini-pro" });
-
-    const prompt = `Generate ${count} multiple choice questions in Arabic based on the following ${subject} lesson:
-
-${lessonContent}
-
-Format each question as:
-Q: [Question]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Answer: [Correct option]`;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    const text = response.text();
-
-    // Parse the questions from the response
-    const questions = text.split("\n\nQ:").filter((q: string) => q.trim());
-
-    return questions.map((q: string) => "Q:" + q);
+    const prompt = `بناءً على درس "${subject}"، أنشئ ${count} أسئلة خيار من متعدد. اجعل كل سؤال في سطر جديد متبوعاً بالخيارات. المحتوى:\n\n${lessonContent}`;
+    const response = await askGemini(prompt);
+    return response.split("\n").filter(line => line.trim().length > 10);
   } catch (error) {
-    console.error("Gemini API error:", error);
-    throw new Error("Failed to generate quiz questions");
+    console.warn("Quiz Generation Failed:", error);
+    return [];
   }
 }

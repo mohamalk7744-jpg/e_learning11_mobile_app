@@ -1,84 +1,124 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, ActivityIndicator, RefreshControl, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { trpc } from "@/lib/trpc";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function ExamsScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
 
-  const exams = [
-    { 
-      id: 1, 
-      title: "اختبار الرياضيات الفصلي", 
-      subject: "الرياضيات",
-      date: "2025-12-30",
-      status: "قادم",
-      score: null
-    },
-    { 
-      id: 2, 
-      title: "اختبار اللغة العربية الشهري", 
-      subject: "اللغة العربية",
-      date: "2025-12-25",
-      status: "مكتمل",
-      score: 85
-    },
-    { 
-      id: 3, 
-      title: "اختبار العلوم الفصلي", 
-      subject: "العلوم",
-      date: "2026-01-10",
-      status: "قادم",
-      score: null
-    },
-  ];
+  // جلب الاختبارات الفصلية والمنتهية فقط (غير اليومية)
+  const { data: quizzes, isLoading, refetch } = trpc.quizzes.listExams.useQuery();
+  
+  // جلب معرفات الاختبارات
+  const quizIds = quizzes?.map(q => q.id) || [];
+  
+  // جلب حالة الاختبارات للطالب
+  const { data: quizStatus } = trpc.quizzes.getExamsWithStatus.useQuery(
+    { quizIds },
+    { enabled: quizIds.length > 0 }
+  );
 
-  const handlePrepareExam = (examTitle: string) => {
-    Alert.alert(
-      "التحضير للاختبار",
-      `هل تريد الانتقال لدروس التحضير لـ: ${examTitle}؟`,
-      [
-        { text: "إلغاء", onPress: () => {}, style: "cancel" },
-        { 
-          text: "ابدأ", 
-          onPress: () => {
-            Alert.alert("✅ تم", `تم فتح دروس التحضير لـ ${examTitle}`);
-          }
-        },
-      ]
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case "monthly": return "اختبار شهري";
+      case "semester": return "اختبار فصلي";
+      default: return type;
+    }
+  };
+
+  const getStatusBadge = (quizId: number) => {
+    const status = quizStatus?.[quizId];
+    
+    if (!status?.hasAttempted) {
+      return null;
+    }
+    
+    if (status.isGraded && status.percentage !== null) {
+      return (
+        <View style={[styles.statusBadge, styles.gradedBadge]}>
+          <Ionicons name="checkmark-circle" size={14} color="#34C759" />
+          <ThemedText style={styles.statusBadgeText}>درجة: {status.percentage}%</ThemedText>
+        </View>
+      );
+    }
+    
+    return (
+      <View style={[styles.statusBadge, styles.pendingBadge]}>
+        <Ionicons name="time" size={14} color="#F59E0B" />
+        <ThemedText style={styles.statusBadgeText}>في انتظار التصحيح</ThemedText>
+      </View>
     );
   };
 
-  const handleViewResults = (examTitle: string, score: number) => {
-    Alert.alert(
-      "نتائج الاختبار",
-      `${examTitle}\n\nدرجتك: ${score}/100\n\nممتاز! استمر في الاجتهاد 🌟`,
-      [
-        { text: "حسناً", onPress: () => {} }
-      ]
-    );
+  const getButtonText = (quizId: number, quizType: string) => {
+    const status = quizStatus?.[quizId];
+    
+    // للاختبارات الشهرية والفصلية - لا نسمح بإعادة المحاولة أو المراجعة
+    if (quizType === 'monthly' || quizType === 'semester') {
+      if (status?.hasAttempted) {
+        return "تم الحل";
+      }
+      return "بدء الاختبار";
+    }
+    
+    // للاختبارات اليومية
+    if (!status?.hasAttempted) {
+      return "بدء الاختبار";
+    }
+    
+    if (status.isGraded) {
+      return "مراجعة الاختبار";
+    }
+    
+    return "إعادة المحاولة";
   };
 
-  const handleUploadSolution = () => {
-    Alert.alert(
-      "رفع حل الاختبار",
-      "اختر طريقة الرفع:",
-      [
-        { 
-          text: "التقط صورة", 
-          onPress: () => {
-            Alert.alert("✅ تم", "تم التقاط الصورة وتحميلها بنجاح!");
-          }
-        },
-        { 
-          text: "اختر من المعرض", 
-          onPress: () => {
-            Alert.alert("✅ تم", "تم اختيار الصورة وتحميلها بنجاح!");
-          }
-        },
-        { text: "إلغاء", onPress: () => {}, style: "cancel" }
-      ]
-    );
+  const isButtonDisabled = (quizId: number, quizType: string) => {
+    const status = quizStatus?.[quizId];
+    
+    // للاختبارات الشهرية والفصلية - تعطيل الزر بعد الإرسال
+    if (quizType === 'monthly' || quizType === 'semester') {
+      return status?.hasAttempted;
+    }
+    
+    return false;
+  };
+
+  const canOpenQuiz = (quizId: number, quizType: string) => {
+    const status = quizStatus?.[quizId];
+    
+    // إذا كان الاختبار من نوع شهري أو فصلي وقد سبق للطالب حله
+    if ((quizType === 'monthly' || quizType === 'semester') && status?.hasAttempted) {
+      return false;
+    }
+    
+    // للاختبارات اليومية - يمكن فتحها دائماً
+    return true;
+  };
+
+  const handleQuizPress = (quizId: number, quizType: string) => {
+    if (canOpenQuiz(quizId, quizType)) {
+      router.push(`/quiz/${quizId}`);
+    } else {
+      // إظهار رسالة تنبيه
+      Alert.alert(
+        "تنبيه",
+        "لقد قمت بإتمام هذا الاختبار سابقاً ولا يمكنك إعادة فتحه",
+        [{ text: "حسناً" }]
+      );
+    }
   };
 
   return (
@@ -88,84 +128,79 @@ export default function ExamsScreen() {
         paddingTop: Math.max(insets.top, 16),
         paddingBottom: Math.max(insets.bottom, 16),
       }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
     >
       <ThemedView style={styles.header}>
-        <ThemedText type="title">الاختبارات</ThemedText>
-        <ThemedText type="default" style={styles.subtitle}>الاختبارات الفصلية والشهرية</ThemedText>
+        <ThemedText type="title" style={styles.title}>الاختبارات الرسمية</ThemedText>
+        <ThemedText type="default" style={styles.subtitle}>الاختبارات الشهرية والفصلية لتقييم مستواك</ThemedText>
       </ThemedView>
 
-      <View style={styles.examsContainer}>
-        {exams.map((exam) => (
-          <Pressable 
-            key={exam.id}
-            style={({ pressed }) => [
-              styles.examCard,
-              exam.status === "مكتمل" ? styles.completedCard : styles.upcomingCard,
-              pressed && styles.examCardPressed
-            ]}
-          >
-            <View style={styles.examHeader}>
-              <View style={styles.examInfo}>
-                <ThemedText type="defaultSemiBold" style={styles.examTitle}>
-                  {exam.title}
-                </ThemedText>
-                <ThemedText type="default" style={styles.examSubject}>
-                  {exam.subject}
-                </ThemedText>
-              </View>
-              <View style={[
-                styles.statusBadge,
-                exam.status === "مكتمل" ? styles.completedBadge : styles.upcomingBadge
-              ]}>
-                <ThemedText style={styles.statusText}>
-                  {exam.status === "مكتمل" ? "✓" : "⏱️"}
-                </ThemedText>
-              </View>
+      {isLoading ? (
+        <ActivityIndicator size="large" color="#007AFF" style={{ marginTop: 50 }} />
+      ) : (
+        <View style={styles.examsContainer}>
+          {quizzes?.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <ThemedText style={styles.emptyText}>لا توجد اختبارات شهرية أو فصلية حالياً</ThemedText>
             </View>
-
-            <View style={styles.examMeta}>
-              <ThemedText type="default" style={styles.metaText}>
-                📅 {exam.date}
-              </ThemedText>
-              {exam.score !== null && (
-                <ThemedText type="defaultSemiBold" style={styles.score}>
-                  الدرجة: {exam.score}/100
-                </ThemedText>
-              )}
-            </View>
-
-            {exam.status === "قادم" ? (
+          ) : (
+            quizzes?.map((quiz) => (
               <Pressable 
-                style={styles.prepareButton}
-                onPress={() => handlePrepareExam(exam.title)}
+                key={quiz.id}
+                style={({ pressed }) => [
+                  styles.examCard,
+                  !canOpenQuiz(quiz.id, quiz.type) && styles.disabledCard,
+                  pressed && canOpenQuiz(quiz.id, quiz.type) && styles.examCardPressed
+                ]}
+                onPress={() => handleQuizPress(quiz.id, quiz.type)}
               >
-                <ThemedText style={styles.prepareButtonText}>استعد للاختبار</ThemedText>
-              </Pressable>
-            ) : (
-              <Pressable 
-                style={styles.viewButton}
-                onPress={() => handleViewResults(exam.title, exam.score!)}
-              >
-                <ThemedText style={styles.viewButtonText}>عرض النتائج</ThemedText>
-              </Pressable>
-            )}
-          </Pressable>
-        ))}
-      </View>
+                <View style={styles.examHeader}>
+                  <View style={styles.examInfo}>
+                    <ThemedText type="defaultSemiBold" style={styles.examTitle}>
+                      {quiz.title}
+                    </ThemedText>
+                    <ThemedText type="default" style={styles.examType}>
+                      {getTypeLabel(quiz.type)}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.badge}>
+                    <ThemedText style={styles.badgeText}>رسمي</ThemedText>
+                  </View>
+                </View>
 
-      {/* Upload Section */}
-      <ThemedView style={styles.uploadSection}>
-        <ThemedText type="subtitle" style={styles.uploadTitle}>📤 رفع حل الاختبار</ThemedText>
-        <ThemedText type="default" style={styles.uploadDescription}>
-          يمكنك رفع صورة حل الاختبار العام هنا ليتم تصحيحها من قبل المعلم
-        </ThemedText>
-        <Pressable 
-          style={styles.uploadButton}
-          onPress={handleUploadSolution}
-        >
-          <ThemedText style={styles.uploadButtonText}>+ رفع صورة</ThemedText>
-        </Pressable>
-      </ThemedView>
+                {quiz.description && (
+                  <ThemedText type="default" style={styles.description}>
+                    {quiz.description}
+                  </ThemedText>
+                )}
+
+                {/* عرض حالة الاختبار */}
+                {getStatusBadge(quiz.id)}
+
+                <View style={styles.footer}>
+                  <ThemedText style={styles.footerText}>
+                    📅 {new Date(quiz.createdAt).toLocaleDateString('ar-EG')}
+                  </ThemedText>
+                  <View style={[
+                    styles.startButton,
+                    isButtonDisabled(quiz.id, quiz.type) && styles.disabledButton,
+                    quizStatus?.[quiz.id]?.hasAttempted && !isButtonDisabled(quiz.id, quiz.type) && styles.retryButton
+                  ]}>
+                    <ThemedText style={[
+                      styles.startButtonText,
+                      isButtonDisabled(quiz.id, quiz.type) && styles.disabledButtonText
+                    ]}>
+                      {getButtonText(quiz.id, quiz.type)}
+                    </ThemedText>
+                  </View>
+                </View>
+              </Pressable>
+            ))
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -177,131 +212,150 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingVertical: 20,
-    marginBottom: 16,
+    marginBottom: 8,
+    alignItems: 'flex-end',
+  },
+  title: {
+    textAlign: 'right',
   },
   subtitle: {
     fontSize: 14,
     opacity: 0.7,
     marginTop: 4,
+    textAlign: 'right',
   },
   examsContainer: {
     paddingHorizontal: 16,
-    gap: 12,
+    gap: 16,
     marginBottom: 24,
   },
   examCard: {
     padding: 16,
-    borderRadius: 12,
-    gap: 12,
-  },
-  completedCard: {
-    backgroundColor: "rgba(52, 199, 89, 0.08)",
-    borderLeftWidth: 4,
-    borderLeftColor: "#34C759",
-  },
-  upcomingCard: {
-    backgroundColor: "rgba(255, 149, 0, 0.08)",
-    borderLeftWidth: 4,
-    borderLeftColor: "#FF9500",
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#eee',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
   },
   examCardPressed: {
     opacity: 0.7,
+    transform: [{ scale: 0.98 }],
+  },
+  disabledCard: {
+    opacity: 0.6,
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
   },
   examHeader: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    marginBottom: 8,
   },
   examInfo: {
     flex: 1,
-    gap: 4,
+    alignItems: 'flex-end',
   },
   examTitle: {
-    fontSize: 16,
-  },
-  examSubject: {
-    fontSize: 13,
-    opacity: 0.7,
-  },
-  statusBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  completedBadge: {
-    backgroundColor: "#34C759",
-  },
-  upcomingBadge: {
-    backgroundColor: "#FF9500",
-  },
-  statusText: {
     fontSize: 18,
-    color: "#fff",
+    color: '#333',
   },
-  examMeta: {
-    gap: 8,
-  },
-  metaText: {
+  examType: {
     fontSize: 13,
-    opacity: 0.7,
+    color: '#FF9500',
+    fontWeight: '600',
+    marginTop: 2,
   },
-  score: {
+  badge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    backgroundColor: '#FFF9F0',
+    borderWidth: 1,
+    borderColor: '#FFE4BC',
+  },
+  badgeText: {
+    color: '#FF9500',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  description: {
     fontSize: 14,
-    color: "#34C759",
+    color: '#666',
+    textAlign: 'right',
+    marginBottom: 12,
   },
-  prepareButton: {
-    paddingVertical: 10,
+  
+  // Status Badge Styles
+  statusBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginBottom: 12,
+    gap: 6,
+  },
+  gradedBadge: {
+    backgroundColor: '#F0FFF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  pendingBadge: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  
+  footer: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#f5f5f5',
+    paddingTop: 12,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#999',
+  },
+  startButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: "#FF9500",
-    alignItems: "center",
   },
-  prepareButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+  retryButton: {
+    backgroundColor: '#34C759',
   },
-  viewButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#34C759",
-    alignItems: "center",
+  disabledButton: {
+    backgroundColor: '#E5E7EB',
   },
-  viewButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  uploadSection: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "rgba(0, 122, 255, 0.08)",
-    gap: 12,
-  },
-  uploadTitle: {
-    marginBottom: 4,
-  },
-  uploadDescription: {
+  startButtonText: {
+    color: '#fff',
     fontSize: 13,
-    lineHeight: 18,
-    opacity: 0.7,
+    fontWeight: '600',
   },
-  uploadButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#007AFF",
-    alignItems: "center",
-    marginTop: 8,
+  disabledButtonText: {
+    color: '#9CA3AF',
   },
-  uploadButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 60,
   },
+  emptyText: {
+    textAlign: 'center',
+    opacity: 0.5,
+    fontSize: 16,
+  }
 });

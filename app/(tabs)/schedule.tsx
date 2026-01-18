@@ -1,54 +1,24 @@
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { ScrollView, StyleSheet, View, Pressable, Alert } from "react-native";
+import { ScrollView, StyleSheet, View, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { trpc } from "@/lib/trpc";
 
 export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const todayLessons = [
-    { id: 1, title: "الرياضيات", chapter: "الفصل 5", time: "09:00 AM", duration: "45 دقيقة" },
-    { id: 2, title: "اللغة العربية", chapter: "النصوص الأدبية", time: "10:30 AM", duration: "40 دقيقة" },
-    { id: 3, title: "العلوم", chapter: "الكيمياء العضوية", time: "02:00 PM", duration: "50 دقيقة" },
-  ];
+  // جلب المواد التي يمتلك الطالب صلاحية الوصول إليها
+  const { data: mySubjects, isLoading } = trpc.subjects.listMySubjects.useQuery();
 
-  const todayQuizzes = [
-    { id: 1, title: "اختبار الرياضيات", time: "11:30 AM", duration: "30 دقيقة" },
-  ];
-
-  const handleStartLesson = (lessonTitle: string) => {
-    Alert.alert(
-      "بدء الدرس",
-      `هل تريد بدء درس: ${lessonTitle}؟`,
-      [
-        { text: "إلغاء", onPress: () => {}, style: "cancel" },
-        { 
-          text: "ابدأ", 
-          onPress: () => {
-            Alert.alert("✅ تم", `تم بدء درس ${lessonTitle} بنجاح!`);
-          }
-        },
-      ]
+  if (isLoading) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+      </ThemedView>
     );
-  };
-
-  const handleTakeQuiz = (quizTitle: string) => {
-    Alert.alert(
-      "بدء الاختبار",
-      `هل تريد بدء: ${quizTitle}؟`,
-      [
-        { text: "إلغاء", onPress: () => {}, style: "cancel" },
-        { 
-          text: "ابدأ", 
-          onPress: () => {
-            Alert.alert("✅ تم", `تم بدء ${quizTitle} بنجاح!`);
-          }
-        },
-      ]
-    );
-  };
+  }
 
   return (
     <ScrollView 
@@ -60,92 +30,42 @@ export default function ScheduleScreen() {
     >
       <ThemedView style={styles.header}>
         <ThemedText type="title">الخطة الدراسية</ThemedText>
-        <ThemedText type="default" style={styles.date}>اليوم - 24 ديسمبر 2025</ThemedText>
+        <ThemedText type="default" style={styles.subtitle}>المواد المشترك بها</ThemedText>
       </ThemedView>
 
-      {/* Lessons Section */}
       <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>📚 الدروس</ThemedText>
-        {todayLessons.map((lesson) => (
-          <Pressable 
-            key={lesson.id}
-            style={({ pressed }) => [
-              styles.lessonItem,
-              pressed && styles.lessonItemPressed
-            ]}
-          >
-            <View style={styles.lessonItemContent}>
-              <ThemedText type="defaultSemiBold" style={styles.lessonName}>
-                {lesson.title}
-              </ThemedText>
-              <ThemedText type="default" style={styles.lessonChapter}>
-                {lesson.chapter}
-              </ThemedText>
-              <View style={styles.lessonMeta}>
-                <ThemedText type="default" style={styles.metaText}>
-                  🕐 {lesson.time}
-                </ThemedText>
-                <ThemedText type="default" style={styles.metaText}>
-                  ⏱️ {lesson.duration}
-                </ThemedText>
-              </View>
-            </View>
+        {mySubjects && mySubjects.length > 0 ? (
+          mySubjects.map((subject) => (
             <Pressable 
-              style={styles.startButton}
-              onPress={() => handleStartLesson(lesson.title)}
+              key={subject.id}
+              style={({ pressed }) => [
+                styles.subjectCard,
+                pressed && styles.cardPressed
+              ]}
+              onPress={() => router.push(`/subject/${subject.id}`)}
             >
-              <ThemedText style={styles.startButtonText}>ابدأ</ThemedText>
-            </Pressable>
-          </Pressable>
-        ))}
-      </ThemedView>
-
-      {/* Quizzes Section */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>✏️ الاختبارات</ThemedText>
-        {todayQuizzes.map((quiz) => (
-          <Pressable 
-            key={quiz.id}
-            style={({ pressed }) => [
-              styles.quizItem,
-              pressed && styles.quizItemPressed
-            ]}
-          >
-            <View style={styles.quizItemContent}>
-              <ThemedText type="defaultSemiBold" style={styles.quizName}>
-                {quiz.title}
-              </ThemedText>
-              <View style={styles.quizMeta}>
-                <ThemedText type="default" style={styles.metaText}>
-                  🕐 {quiz.time}
+              <View style={styles.cardContent}>
+                <ThemedText type="subtitle" style={styles.subjectName}>
+                  {subject.name}
                 </ThemedText>
-                <ThemedText type="default" style={styles.metaText}>
-                  ⏱️ {quiz.duration}
+                <ThemedText type="default" style={styles.subjectDesc}>
+                  {subject.description || "لا يوجد وصف لهذه المادة"}
                 </ThemedText>
+                <View style={styles.metaInfo}>
+                  <ThemedText style={styles.metaText}>📅 دورة {subject.numberOfDays} يوم</ThemedText>
+                </View>
               </View>
-            </View>
-            <Pressable 
-              style={styles.takeButton}
-              onPress={() => handleTakeQuiz(quiz.title)}
-            >
-              <ThemedText style={styles.takeButtonText}>اختبر</ThemedText>
+              <View style={styles.arrowContainer}>
+                <ThemedText style={styles.arrow}>←</ThemedText>
+              </View>
             </Pressable>
-          </Pressable>
-        ))}
-      </ThemedView>
-
-      {/* Progress Section */}
-      <ThemedView style={styles.section}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>📊 التقدم</ThemedText>
-        <View style={styles.progressCard}>
-          <View style={styles.progressItem}>
-            <ThemedText type="default">الدروس المكتملة</ThemedText>
-            <ThemedText type="defaultSemiBold" style={styles.progressNumber}>12 / 30</ThemedText>
-          </View>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: "40%" }]} />
-          </View>
-        </View>
+          ))
+        ) : (
+          <ThemedView style={styles.emptyContainer}>
+            <ThemedText style={styles.emptyText}>لم يتم تفعيل أي مواد لك بعد.</ThemedText>
+            <ThemedText style={styles.emptySubtext}>يرجى التواصل مع الإدارة لتفعيل اشتراكك.</ThemedText>
+          </ThemedView>
+        )}
       </ThemedView>
     </ScrollView>
   );
@@ -154,126 +74,83 @@ export default function ScheduleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 20,
-    marginBottom: 16,
+    alignItems: 'flex-end',
   },
-  date: {
-    fontSize: 14,
-    opacity: 0.7,
+  subtitle: {
+    opacity: 0.6,
     marginTop: 4,
   },
   section: {
     paddingHorizontal: 16,
-    marginBottom: 24,
-    gap: 12,
+    gap: 16,
   },
-  sectionTitle: {
-    marginBottom: 8,
+  subjectCard: {
+    flexDirection: 'row-reverse',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
   },
-  lessonItem: {
-    flexDirection: "row",
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "rgba(0, 122, 255, 0.08)",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  lessonItemPressed: {
-    opacity: 0.6,
-  },
-  lessonItemContent: {
-    flex: 1,
-    gap: 4,
-  },
-  lessonName: {
-    fontSize: 15,
-  },
-  lessonChapter: {
-    fontSize: 13,
+  cardPressed: {
     opacity: 0.7,
+    backgroundColor: '#f1f3f5',
   },
-  lessonMeta: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
+  cardContent: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  subjectName: {
+    fontSize: 18,
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  subjectDesc: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'right',
+    marginBottom: 10,
+  },
+  metaInfo: {
+    flexDirection: 'row',
   },
   metaText: {
     fontSize: 12,
-    opacity: 0.6,
+    color: '#007AFF',
+    fontWeight: '600',
   },
-  startButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#007AFF",
-    marginLeft: 8,
+  arrowContainer: {
+    paddingRight: 15,
   },
-  startButtonText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
+  arrow: {
+    fontSize: 20,
+    color: '#ccc',
   },
-  quizItem: {
-    flexDirection: "row",
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "rgba(255, 149, 0, 0.08)",
-    alignItems: "center",
-    justifyContent: "space-between",
+  emptyContainer: {
+    marginTop: 100,
+    alignItems: 'center',
+    padding: 20,
   },
-  quizItemPressed: {
-    opacity: 0.6,
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: '#333',
   },
-  quizItemContent: {
-    flex: 1,
-    gap: 4,
-  },
-  quizName: {
-    fontSize: 15,
-  },
-  quizMeta: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 4,
-  },
-  takeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: "#FF9500",
-    marginLeft: 8,
-  },
-  takeButtonText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  progressCard: {
-    padding: 16,
-    borderRadius: 10,
-    backgroundColor: "rgba(0, 122, 255, 0.08)",
-    gap: 12,
-  },
-  progressItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  progressNumber: {
-    fontSize: 16,
-  },
-  progressBar: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#007AFF",
-    borderRadius: 4,
-  },
+  emptySubtext: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 8,
+  }
 });
