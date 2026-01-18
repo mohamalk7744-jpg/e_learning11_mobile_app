@@ -72,6 +72,34 @@ export const appRouter = router({
 
   users: router({
     listStudents: protectedProcedure.query(() => db.getStudents()),
+    listAll: protectedProcedure.query(() => db.getAllUsers()),
+    create: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          email: z.string().email(),
+          role: z.enum(["user", "admin"]).default("user"),
+        })
+      )
+      .mutation(async ({ input }) => {
+        // إنشاء openId فريد للمستخدم الجديد
+        const openId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        await db.upsertUser({
+          openId,
+          name: input.name,
+          email: input.email,
+          role: input.role,
+          loginMethod: "email",
+          lastSignedIn: new Date(),
+        });
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteUser(input.id);
+        return { success: true };
+      }),
   }),
 
   subjects: router({

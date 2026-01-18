@@ -13,6 +13,7 @@ export default function AdminDashboard() {
     { title: "نتائج واختبارات الطلاب", href: "/admin/results", icon: "stats-chart-outline", color: "#8B5CF6" },
     { title: "إدارة صلاحيات الطلاب", href: "/admin/permissions", icon: "people-outline", color: "#EF4444" },
     { title: "إدارة الخصومات", href: "/admin/discounts", icon: "pricetag-outline", color: "#EC4899" },
+    { title: "إدارة المستخدمين", href: "/admin/users", icon: "person-add-outline", color: "#10B981" },
   ];
 
   return (

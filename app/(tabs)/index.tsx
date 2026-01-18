@@ -20,10 +20,15 @@ export default function HomeScreen() {
   });
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.replace('/auth/login');
+    if (!loading) {
+      if (!isAuthenticated) {
+        router.replace('/auth/login');
+      } else if (user?.role === 'admin') {
+        // إذا كان مسؤول، يمنع من دخول واجهة الطلاب ويوجه للوحة التحكم
+        router.replace('/admin');
+      }
     }
-  }, [loading, isAuthenticated, router]);
+  }, [loading, isAuthenticated, user, router]);
 
   if (loading) {
     return (

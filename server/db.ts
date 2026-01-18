@@ -122,6 +122,18 @@ export async function getStudents() {
   return db.select().from(users).where(eq(users.role, "user"));
 }
 
+export async function getAllUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users);
+}
+
+export async function deleteUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(users).where(eq(users.id, id));
+}
+
 // ==================== Subjects ====================
 export async function createSubject(data: InsertSubject) {
   const db = await getDb();
