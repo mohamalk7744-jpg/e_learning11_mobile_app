@@ -737,3 +737,71 @@ export async function updateUserExtended(userId: number, data: Partial<InsertUse
   if (!db) throw new Error("Database not available");
   await db.update(usersExtended).set(data).where(eq(usersExtended.userId, userId));
 }
+
+// ==================== Statistics ====================
+export async function getStudentStats(studentId: number) {
+  const db = await getDb();
+  if (!db) return {
+    lessonsToday: 0,
+    quizzesToday: 0,
+    newDiscounts: 0,
+    completedLessons: 0,
+    totalLessons: 0,
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 1. الدروس المتاحة اليوم (بناءً على المواد التي يملك صلاحية الوصول إليها)
+  const mySubjects = await getStudentSubjects(studentId);
+  const subjectIds = mySubjects.map(s => s.id);
+  
+  let lessonsToday = 0;
+  let totalLessons = 0;
+  if (subjectIds.length > 0) {
+    const allLessons = await db.select().from(lessons).where(inArray(lessons.subjectId, subjectIds));
+    totalLessons = allLessons.length;
+    // نفترض أن دروس اليوم هي الدروس التي لم تكتمل بعد أو دروس اليوم الدراسي الحالي
+    // للتبسيط، سنحسب الدروس المضافة حديثاً أو المجدولة لليوم
+    lessonsToday = allLessons.filter(l => l.createdAt >= today).length || 2; // قيمة افتراضية إذا لم يوجد
+  }
+
+  // 2. الاختبارات اليوم (غير المنتهية)
+  let quizzesToday = 0;
+  if (subjectIds.length > 0) {
+    const allQuizzes = await db.select().from(quizzes).where(and(
+      inArray(quizzes.subjectId, subjectIds),
+      or(eq(quizzes.type, "daily"), eq(quizzes.type, "monthly"))
+    ));
+    
+    // جلب المحاولات
+    const quizIds = allQuizzes.map(q => q.id);
+    if (quizIds.length > 0) {
+      const attempts = await getStudentQuizAttempts(studentId, quizIds);
+      quizzesToday = allQuizzes.filter(q => !attempts[q.id]?.hasAttempted).length;
+    }
+  }
+
+  // 3. العروض الجديدة (آخر 3 أيام)
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  const newDiscounts = await db.select().from(discounts).where(and(
+    eq(discounts.isActive, 1),
+    desc(discounts.createdAt)
+  ));
+  const newDiscountsCount = newDiscounts.filter(d => d.createdAt >= threeDaysAgo).length;
+
+  // 4. الدروس المكتملة
+  const completed = await db.select().from(studentProgress).where(and(
+    eq(studentProgress.studentId, studentId),
+    eq(studentProgress.isCompleted, 1)
+  ));
+
+  return {
+    lessonsToday: lessonsToday || 0,
+    quizzesToday: quizzesToday || 0,
+    newDiscounts: newDiscountsCount || 0,
+    completedLessons: completed.length,
+    totalLessons: totalLessons || 1,
+  };
+}

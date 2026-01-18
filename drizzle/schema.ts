@@ -32,6 +32,8 @@ export const subjects = mysqlTable("subjects", {
   description: text("description"),
   createdBy: int("createdBy").notNull(),
   numberOfDays: int("numberOfDays").notNull().default(30),
+  curriculum: text("curriculum"),
+  curriculumUrl: varchar("curriculumUrl", { length: 512 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -126,6 +128,7 @@ export const discounts = mysqlTable("discounts", {
   discountType: mysqlEnum("discountType", ["percentage", "fixed"]).notNull(), // نسبة أو مبلغ ثابت
   discountValue: int("discountValue").notNull(), // القيمة (نسبة أو مبلغ)
   company: varchar("company", { length: 255 }).notNull(), // اسم الشركة أو المعهد
+  contactNumber: varchar("contactNumber", { length: 20 }),
   imageUrl: varchar("imageUrl", { length: 512 }),
   isActive: int("isActive").notNull().default(1),
   createdBy: int("createdBy").notNull(),

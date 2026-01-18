@@ -111,14 +111,14 @@ export default function ResultsScreen() {
       {step !== 'subjects' && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.breadcrumbScroll} contentContainerStyle={{flexDirection: 'row-reverse'}}>
           <View style={styles.breadcrumbItem}>
-            <ThemedText style={styles.breadcrumbText}>{selectedSubject?.name}</ThemedText>
+            <ThemedText style={styles.breadcrumbText}>{selectedSubject?.name || '...'}</ThemedText>
           </View>
           {selectedType && (
             <>
               <Ionicons name="chevron-back" size={14} color="#9CA3AF" />
               <View style={styles.breadcrumbItem}>
                 <ThemedText style={styles.breadcrumbText}>
-                  {quizTypes.find(t => t.id === selectedType)?.label}
+                  {quizTypes.find(t => t.id === selectedType)?.label || '...'}
                 </ThemedText>
               </View>
             </>
@@ -127,7 +127,7 @@ export default function ResultsScreen() {
             <>
               <Ionicons name="chevron-back" size={14} color="#9CA3AF" />
               <View style={[styles.breadcrumbItem, styles.breadcrumbActive]}>
-                <ThemedText style={[styles.breadcrumbText, styles.whiteText]}>{selectedQuiz.title}</ThemedText>
+                <ThemedText style={[styles.breadcrumbText, styles.whiteText]}>{selectedQuiz.title || '...'}</ThemedText>
               </View>
             </>
           )}

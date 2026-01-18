@@ -1,88 +1,102 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Pressable, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/hooks/use-auth';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { trpc } from '@/lib/trpc';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const { user, loading, isAuthenticated, logout } = useAuth();
-  const [stats, setStats] = useState({
-    lessonsToday: 3,
-    quizzesToday: 1,
-    newDiscounts: 2,
-    completedLessons: 12,
-    totalLessons: 30,
+  const { user, loading: authLoading, isAuthenticated, logout } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data: stats, isLoading: statsLoading, refetch } = trpc.users.getStats.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role !== 'admin'
   });
 
   useEffect(() => {
-    if (!loading) {
+    if (!authLoading) {
       if (!isAuthenticated) {
         router.replace('/auth/login');
       } else if (user?.role === 'admin') {
-        // إذا كان مسؤول، يمنع من دخول واجهة الطلاب ويوجه للوحة التحكم
         router.replace('/admin');
       }
     }
-  }, [loading, isAuthenticated, user, router]);
+  }, [authLoading, isAuthenticated, user, router]);
 
-  if (loading) {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  };
+
+  if (authLoading || (statsLoading && !refreshing)) {
     return (
-      <ThemedView style={styles.container}>
+      <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
       </ThemedView>
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !stats) {
     return null;
   }
 
-  const progressPercent = Math.round((stats.completedLessons / stats.totalLessons) * 100);
+  const progressPercent = stats.totalLessons > 0 
+    ? Math.round((stats.completedLessons / stats.totalLessons) * 100) 
+    : 0;
 
   return (
-    <ScrollView style={styles.scrollContainer}>
+    <ScrollView 
+      style={styles.scrollContainer}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <ThemedView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <ThemedText type="title">أهلاً، {user?.name || 'الطالب'}</ThemedText>
-            <ThemedText style={styles.subtitle}>
-              استمر في رحلتك التعليمية
-            </ThemedText>
+          <View style={styles.headerContent}>
+            <View style={styles.welcomeText}>
+              <ThemedText type="title" style={styles.title}>أهلاً، {user?.name?.split(' ')[0] || 'الطالب'}</ThemedText>
+              <ThemedText style={styles.subtitle}>استمر في رحلتك التعليمية اليوم</ThemedText>
+            </View>
+            <View style={styles.avatarPlaceholder}>
+              <Ionicons name="person-circle" size={60} color={Colors[colorScheme ?? 'light'].tint} />
+            </View>
           </View>
         </View>
 
-        {/* Statistics */}
+        {/* Statistics Grid */}
         <View style={styles.statsContainer}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            📊 إحصائيات اليوم
-          </ThemedText>
           <View style={styles.statsGrid}>
-            <View style={[styles.statCard, { borderLeftColor: Colors[colorScheme ?? 'light'].tint }]}>
-              <ThemedText style={styles.statNumber}>{stats.lessonsToday}</ThemedText>
-              <ThemedText style={styles.statLabel}>دروس</ThemedText>
+            <View style={[styles.statCard, { backgroundColor: '#EEF2FF' }]}>
+              <Ionicons name="book" size={24} color="#4F46E5" />
+              <ThemedText style={[styles.statNumber, { color: '#4F46E5' }]}>{stats.lessonsToday}</ThemedText>
+              <ThemedText style={styles.statLabel}>دروس اليوم</ThemedText>
             </View>
-            <View style={[styles.statCard, { borderLeftColor: '#FF9500' }]}>
-              <ThemedText style={styles.statNumber}>{stats.quizzesToday}</ThemedText>
-              <ThemedText style={styles.statLabel}>اختبار</ThemedText>
+            <View style={[styles.statCard, { backgroundColor: '#FFF7ED' }]}>
+              <Ionicons name="document-text" size={24} color="#EA580C" />
+              <ThemedText style={[styles.statNumber, { color: '#EA580C' }]}>{stats.quizzesToday}</ThemedText>
+              <ThemedText style={styles.statLabel}>اختبارات</ThemedText>
             </View>
-            <View style={[styles.statCard, { borderLeftColor: '#34C759' }]}>
-              <ThemedText style={styles.statNumber}>{stats.newDiscounts}</ThemedText>
-              <ThemedText style={styles.statLabel}>عروض جديدة</ThemedText>
+            <View style={[styles.statCard, { backgroundColor: '#F0FDF4' }]}>
+              <Ionicons name="gift" size={24} color="#16A34A" />
+              <ThemedText style={[styles.statNumber, { color: '#16A34A' }]}>{stats.newDiscounts}</ThemedText>
+              <ThemedText style={styles.statLabel}>عروض</ThemedText>
             </View>
           </View>
         </View>
 
-        {/* Progress */}
-        <View style={styles.progressContainer}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>
-            📈 تقدمك الدراسي
-          </ThemedText>
+        {/* Progress Card */}
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <ThemedText type="defaultSemiBold">تقدمك الدراسي الإجمالي</ThemedText>
+            <ThemedText style={styles.progressPercentText}>{progressPercent}%</ThemedText>
+          </View>
           <View style={styles.progressBar}>
             <View 
               style={[
@@ -94,8 +108,8 @@ export default function HomeScreen() {
               ]} 
             />
           </View>
-          <ThemedText style={styles.progressText}>
-            {stats.completedLessons} من {stats.totalLessons} درس ({progressPercent}%)
+          <ThemedText style={styles.progressDetailText}>
+            أكملت {stats.completedLessons} من أصل {stats.totalLessons} درس بنجاح
           </ThemedText>
         </View>
 
@@ -152,6 +166,11 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
     paddingHorizontal: 16,
@@ -160,56 +179,102 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  headerContent: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  welcomeText: {
+    alignItems: 'flex-end',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
   },
   subtitle: {
     fontSize: 14,
-    opacity: 0.7,
+    color: '#6B7280',
     marginTop: 4,
   },
-  sectionTitle: {
-    marginBottom: 12,
-    fontSize: 18,
+  avatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statsContainer: {
     marginBottom: 24,
   },
   statsGrid: {
-    gap: 12,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   statCard: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    flex: 1,
+    padding: 16,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 8,
   },
   statLabel: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 4,
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '600',
   },
-  progressContainer: {
+  progressCard: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 24,
     marginBottom: 24,
-    paddingHorizontal: 0,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  progressHeader: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  progressPercentText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#007AFF',
   },
   progressBar: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#F3F4F6',
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 5,
   },
-  progressText: {
+  progressDetailText: {
     fontSize: 12,
-    opacity: 0.6,
+    color: '#6B7280',
+    textAlign: 'right',
   },
   actionsContainer: {
     marginBottom: 24,

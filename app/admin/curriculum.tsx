@@ -1,21 +1,60 @@
 import { useState } from "react";
-import { StyleSheet, ScrollView, View, TextInput, Pressable, Alert, ActivityIndicator } from "react-native";
+import { StyleSheet, ScrollView, View, TextInput, Pressable, Alert, ActivityIndicator, Linking } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { trpc } from "@/lib/trpc";
 import { Ionicons } from "@expo/vector-icons";
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 
 export default function CurriculumScreen() {
-  const [selectedSubject, setSelectedSubject] = useState<number | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<any>(null);
   const [curriculum, setCurriculum] = useState("");
+  const [curriculumUrl, setCurriculumUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const { data: subjects, isLoading: loadingSubjects } = trpc.subjects.list.useQuery();
+  const { data: subjects, isLoading: loadingSubjects, refetch } = trpc.subjects.list.useQuery();
   const updateCurriculum = trpc.subjects.update.useMutation();
+  const uploadFile = trpc.storage.upload.useMutation();
 
   const handleSubjectSelect = (subject: any) => {
-    setSelectedSubject(subject.id);
+    setSelectedSubject(subject);
     setCurriculum(subject.curriculum || "");
+    setCurriculumUrl(subject.curriculumUrl || null);
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      setIsUploading(true);
+
+      // تحويل الملف إلى base64
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const uploadResult = await uploadFile.mutateAsync({
+        base64,
+        fileName: `curriculum_${selectedSubject.id}_${Date.now()}.pdf`,
+        contentType: 'application/pdf',
+      });
+
+      setCurriculumUrl(uploadResult.url);
+      Alert.alert("نجاح", "تم رفع ملف المنهاج بنجاح. سيقوم البوت بتحليله.");
+    } catch (error) {
+      console.error(error);
+      Alert.alert("خطأ", "فشل رفع الملف");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -27,9 +66,11 @@ export default function CurriculumScreen() {
     setIsSaving(true);
     try {
       await updateCurriculum.mutateAsync({
-        id: selectedSubject,
+        id: selectedSubject.id,
         curriculum: curriculum,
+        curriculumUrl: curriculumUrl || undefined,
       });
+      await refetch();
       Alert.alert("نجاح", "تم حفظ المنهاج بنجاح");
     } catch (error) {
       console.error(error);
@@ -74,27 +115,60 @@ export default function CurriculumScreen() {
 
         {selectedSubject && (
           <View style={styles.inputArea}>
-            <ThemedText style={styles.label}>2. محتوى المنهاج (سيستخدمه البوت للرد):</ThemedText>
+            <ThemedText style={styles.label}>2. رفع ملف المنهاج (PDF):</ThemedText>
+            <View style={styles.uploadSection}>
+              {curriculumUrl ? (
+                <View style={styles.fileInfo}>
+                  <Ionicons name="document-text" size={24} color="#3B82F6" />
+                  <View style={styles.fileDetails}>
+                    <ThemedText style={styles.fileName}>تم رفع ملف المنهاج</ThemedText>
+                    <Pressable onPress={() => Linking.openURL(curriculumUrl)}>
+                      <ThemedText style={styles.viewFile}>عرض الملف</ThemedText>
+                    </Pressable>
+                  </View>
+                  <Pressable onPress={() => setCurriculumUrl(null)} style={styles.removeFile}>
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable 
+                  style={[styles.uploadButton, isUploading && styles.disabledButton]} 
+                  onPress={handlePickDocument}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <ActivityIndicator color="#3B82F6" />
+                  ) : (
+                    <>
+                      <Ionicons name="cloud-upload-outline" size={24} color="#3B82F6" />
+                      <ThemedText style={styles.uploadButtonText}>اختر ملف PDF</ThemedText>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </View>
+
+            <ThemedText style={styles.label}>3. محتوى المنهاج النصي (اختياري):</ThemedText>
             <TextInput
               style={styles.textInput}
               multiline
-              placeholder="اكتب هنا تفاصيل المنهاج، القوانين، الشروحات..."
+              placeholder="اكتب هنا تفاصيل إضافية للمنهاج..."
               value={curriculum}
               onChangeText={setCurriculum}
               textAlignVertical="top"
             />
             
             <Pressable 
-              style={[styles.saveButton, isSaving && styles.disabledButton]} 
+              style={[styles.saveButton, (isSaving || isUploading) && styles.disabledButton]} 
               onPress={handleSave}
-              disabled={isSaving}
+              disabled={isSaving || isUploading}
             >
               {isSaving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <>
                   <Ionicons name="save-outline" size={20} color="#fff" />
-                  <ThemedText style={styles.saveButtonText}>حفظ المنهاج</ThemedText>
+                  <ThemedText style={styles.saveButtonText}>حفظ التغييرات</ThemedText>
                 </>
               )}
             </Pressable>
@@ -189,5 +263,50 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  uploadSection: {
+    marginBottom: 20,
+  },
+  uploadButton: {
+    borderWidth: 2,
+    borderColor: "#3B82F6",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row-reverse",
+    gap: 10,
+    backgroundColor: "#EFF6FF",
+  },
+  uploadButtonText: {
+    color: "#3B82F6",
+    fontWeight: "bold",
+  },
+  fileInfo: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 12,
+  },
+  fileDetails: {
+    flex: 1,
+    alignItems: "flex-end",
+  },
+  fileName: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  viewFile: {
+    fontSize: 12,
+    color: "#3B82F6",
+    marginTop: 2,
+  },
+  removeFile: {
+    padding: 4,
   },
 });

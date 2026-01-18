@@ -181,7 +181,7 @@ export default function ExamsScreen() {
 
                 <View style={styles.footer}>
                   <ThemedText style={styles.footerText}>
-                    📅 {new Date(quiz.createdAt).toLocaleDateString('ar-EG')}
+                    📅 {quiz.createdAt ? new Date(quiz.createdAt).toLocaleDateString('ar-EG') : '---'}
                   </ThemedText>
                   <View style={[
                     styles.startButton,

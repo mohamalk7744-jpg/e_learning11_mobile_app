@@ -82,7 +82,6 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        // إنشاء openId فريد للمستخدم الجديد
         const openId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         await db.upsertUser({
           openId,
@@ -100,6 +99,7 @@ export const appRouter = router({
         await db.deleteUser(input.id);
         return { success: true };
       }),
+    getStats: protectedProcedure.query(({ ctx }) => db.getStudentStats(ctx.user.id)),
   }),
 
   subjects: router({
@@ -115,6 +115,7 @@ export const appRouter = router({
           description: z.string().optional(),
           numberOfDays: z.number().default(30),
           curriculum: z.string().optional(),
+          curriculumUrl: z.string().optional(),
         })
       )
       .mutation(({ ctx, input }) =>
@@ -123,6 +124,7 @@ export const appRouter = router({
           description: input.description,
           numberOfDays: input.numberOfDays,
           curriculum: input.curriculum,
+          curriculumUrl: input.curriculumUrl,
           createdBy: ctx.user.id,
         })
       ),
@@ -134,6 +136,7 @@ export const appRouter = router({
           description: z.string().optional(),
           numberOfDays: z.number().optional(),
           curriculum: z.string().optional(),
+          curriculumUrl: z.string().optional(),
         })
       )
       .mutation(({ input }) => db.updateSubject(input.id, input)),
@@ -216,21 +219,16 @@ export const appRouter = router({
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(({ input }) => db.getFullQuiz(input.id)),
-    
-    // الحصول على الاختبارات مع حالة الطالب
     getExamsWithStatus: protectedProcedure
       .input(z.object({ quizIds: z.array(z.number()) }))
       .query(({ ctx, input }) => db.getStudentQuizAttempts(ctx.user.id, input.quizIds)),
-    
     listSubmissions: protectedProcedure.query(() => db.getAllSubmissions()),
     getQuizSubmissions: protectedProcedure
       .input(z.object({ quizId: z.number() }))
       .query(({ input }) => db.getSubmissionsByQuiz(input.quizId)),
-    
     getSubmissionDetails: protectedProcedure
       .input(z.object({ studentId: z.number(), quizId: z.number() }))
       .query(({ input }) => db.getDetailedSubmission(input.studentId, input.quizId)),
-
     gradeAnswer: protectedProcedure
       .input(z.object({
         answerId: z.number(),
@@ -246,7 +244,6 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-
     updateQuizModelAnswer: protectedProcedure
       .input(z.object({
         quizId: z.number(),
@@ -260,7 +257,6 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-
     publishResults: protectedProcedure
       .input(z.object({ quizId: z.number() }))
       .mutation(async ({ input }) => {
@@ -269,158 +265,19 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-
-    submit: protectedProcedure
-      .input(z.object({
-        quizId: z.number(),
-        answers: z.array(z.object({
-          questionId: z.number(),
-          selectedOptionId: z.number().optional(),
-          textAnswer: z.string().optional(),
-          imageUrl: z.string().optional(),
-        }))
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const fullQuiz = await db.getFullQuiz(input.quizId);
-        if (!fullQuiz) throw new Error("Quiz not found");
-
-        let correctAnswers = 0;
-        let isAutoGradable = true;
-
-        for (const answer of input.answers) {
-          const question = fullQuiz.questions.find(q => q.id === answer.questionId);
-          let score = null;
-
-          if (question?.questionType === "multiple_choice") {
-            const correctOption = question.options.find(o => o.isCorrect === 1);
-            if (correctOption && correctOption.id === answer.selectedOptionId) {
-              correctAnswers++;
-              score = 1;
-            } else {
-              score = 0;
-            }
-          } else {
-            isAutoGradable = false;
-          }
-
-          await db.createStudentAnswer({
-            quizId: input.quizId,
-            studentId: ctx.user.id,
-            questionId: answer.questionId,
-            selectedOptionId: answer.selectedOptionId,
-            textAnswer: answer.textAnswer,
-            imageUrl: answer.imageUrl,
-            score: score
-          });
-        }
-
-        const quizType = fullQuiz.type;
-        if (isAutoGradable && quizType === "daily") {
-          const totalQuestions = fullQuiz.questions.length;
-          const finalScore = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
-          return {
-            score: finalScore,
-            totalQuestions,
-            correctAnswers,
-            status: "graded"
-          };
-        }
-
-        return {
-          status: "pending_manual_grading"
-        };
-      }),
-
-    getUserResults: protectedProcedure
-      .input(z.object({ quizId: z.number() }))
-      .query(async ({ ctx, input }) => {
-        const quiz = await db.getQuizById(input.quizId);
-        if (!quiz) return null;
-        
-        // Only return results if they are published (for monthly/semester) or if it's a daily quiz
-        if (quiz.type !== "daily" && quiz.resultsPublished === 0) {
-          return { status: "not_published" };
-        }
-
-        const answers = await db.getStudentAnswers(ctx.user.id, input.quizId);
-        return { 
-          status: "published",
-          answers,
-          modelAnswerText: quiz.modelAnswerText,
-          modelAnswerImageUrl: quiz.modelAnswerImageUrl
-        };
-      }),
-    
-    create: protectedProcedure
-      .input(
-        z.object({
-          subjectId: z.number(),
-          title: z.string().min(1),
-          description: z.string().optional(),
-          type: z.enum(["daily", "monthly", "semester"]),
-          dayNumber: z.number().optional(),
-          questions: z.array(z.object({
-            question: z.string(),
-            questionType: z.enum(["multiple_choice", "short_answer", "essay"]),
-            correctAnswerText: z.string().optional(),
-            correctAnswerImageUrl: z.string().optional(),
-            options: z.array(z.object({
-              text: z.string(),
-              isCorrect: z.boolean(),
-            })).optional(),
-          })).optional(),
-        })
-      )
-      .mutation(async ({ ctx, input }) => {
-        const quizId = await db.createQuiz({
-          subjectId: input.subjectId,
-          title: input.title,
-          description: input.description,
-          type: input.type,
-          dayNumber: input.dayNumber,
-          createdBy: ctx.user.id,
-        });
-
-        if (input.questions) {
-          for (const [qIdx, q] of input.questions.entries()) {
-            const questionId = await db.createQuizQuestion({
-              quizId: Number(quizId),
-              question: q.question,
-              questionType: q.questionType,
-              correctAnswerText: q.correctAnswerText,
-              correctAnswerImageUrl: q.correctAnswerImageUrl,
-              order: qIdx + 1,
-            });
-
-            if (q.questionType === "multiple_choice" && q.options) {
-              for (const [oIdx, opt] of q.options.entries()) {
-                await db.createQuizOption({
-                  questionId: Number(questionId),
-                  text: opt.text,
-                  isCorrect: opt.isCorrect ? 1 : 0,
-                  order: oIdx + 1,
-                });
-              }
-            }
-          }
-        }
-        return { quizId };
-      }),
-    delete: protectedProcedure
-      .input(z.object({ id: z.number() }))
-      .mutation(({ input }) => db.deleteQuiz(input.id)),
   }),
 
   discounts: router({
-    list: protectedProcedure.query(() => db.getActiveDiscounts()),
+    list: protectedProcedure.query(() => db.getDiscounts()),
     create: protectedProcedure
       .input(
         z.object({
           title: z.string().min(1),
           description: z.string().optional(),
           discountType: z.enum(["percentage", "fixed"]),
-          discountValue: z.number().min(0),
+          discountValue: z.number(),
           company: z.string().min(1),
+          contactNumber: z.string().optional(),
           imageUrl: z.string().optional(),
         })
       )
@@ -431,8 +288,8 @@ export const appRouter = router({
           discountType: input.discountType,
           discountValue: input.discountValue,
           company: input.company,
+          contactNumber: input.contactNumber,
           imageUrl: input.imageUrl,
-          isActive: 1,
           createdBy: ctx.user.id,
         })
       ),
@@ -445,6 +302,7 @@ export const appRouter = router({
           discountType: z.enum(["percentage", "fixed"]).optional(),
           discountValue: z.number().optional(),
           company: z.string().optional(),
+          contactNumber: z.string().optional(),
           imageUrl: z.string().optional(),
           isActive: z.number().optional(),
         })
@@ -480,7 +338,7 @@ export const appRouter = router({
         }
 
         const subject = await db.getSubjectById(input.subjectId);
-        if (!subject || !subject.curriculum) {
+        if (!subject || (!subject.curriculum && !subject.curriculumUrl)) {
           return {
             answer: "عذراً، لم يتم رفع المنهاج لهذه المادة بعد. سأكون جاهزاً للرد قريباً!",
             success: false
@@ -488,7 +346,11 @@ export const appRouter = router({
         }
 
         try {
-          const answer = await askGemini(input.question, subject.curriculum);
+          let curriculum = subject.curriculum || "";
+          if (subject.curriculumUrl) {
+            curriculum += `\n(ملاحظة: يتوفر ملف PDF للمنهاج على الرابط: ${subject.curriculumUrl})`;
+          }
+          const answer = await askGemini(input.question, curriculum);
 
           await db.createChatMessage({
             studentId: ctx.user.id,

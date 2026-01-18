@@ -8,22 +8,6 @@ export default function DiscountsScreen() {
   const insets = useSafeAreaInsets();
   const { data: discounts, isLoading } = trpc.discounts.list.useQuery();
 
-  const handleUseDiscount = (company: string, discount: string) => {
-    Alert.alert(
-      "استخدام الحسم",
-      `هل تريد استخدام حسم ${discount} من ${company}؟`,
-      [
-        { text: "إلغاء", onPress: () => {}, style: "cancel" },
-        { 
-          text: "استخدم", 
-          onPress: () => {
-            Alert.alert("✅ تم", `تم استخدام حسم ${discount} بنجاح!\nسيتم تطبيقه على طلبك التالي.`);
-          }
-        },
-      ]
-    );
-  };
-
   return (
     <ScrollView 
       style={styles.container}
@@ -42,16 +26,9 @@ export default function DiscountsScreen() {
       ) : (
         <View style={styles.discountsContainer}>
           {discounts?.map((discount) => (
-            <Pressable 
+            <View 
               key={discount.id}
-              style={({ pressed }) => [
-                styles.discountCard,
-                pressed && styles.discountCardPressed
-              ]}
-              onPress={() => handleUseDiscount(
-                discount.company, 
-                `${discount.discountValue}${discount.discountType === "percentage" ? "%" : " ريال"}`
-              )}
+              style={styles.discountCard}
             >
               <View style={styles.discountHeader}>
                 <View style={styles.textContainer}>
@@ -71,10 +48,14 @@ export default function DiscountsScreen() {
                   </ThemedText>
                 </View>
               </View>
-              <View style={styles.useButton}>
-                <ThemedText style={styles.useButtonText}>استخدم الآن</ThemedText>
-              </View>
-            </Pressable>
+              
+              {discount.contactNumber && (
+                <View style={styles.contactContainer}>
+                  <ThemedText style={styles.contactLabel}>للمزيد من المعلومات تواصل مع هذا الرقم:</ThemedText>
+                  <ThemedText style={styles.contactNumber}>{discount.contactNumber}</ThemedText>
+                </View>
+              )}
+            </View>
           ))}
 
           {discounts?.length === 0 && (
@@ -168,16 +149,25 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "bold",
   },
-  useButton: {
+  contactContainer: {
     paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: "#000",
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
     marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-  useButtonText: {
-    color: "#fff",
-    fontSize: 14,
+  contactLabel: {
+    color: "#6B7280",
+    fontSize: 12,
+    marginBottom: 4,
+    textAlign: "center",
+  },
+  contactNumber: {
+    color: "#007AFF",
+    fontSize: 16,
     fontWeight: "bold",
   },
   emptyContainer: {
