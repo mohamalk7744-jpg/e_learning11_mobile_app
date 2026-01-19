@@ -229,6 +229,56 @@ export const appRouter = router({
     getSubmissionDetails: protectedProcedure
       .input(z.object({ studentId: z.number(), quizId: z.number() }))
       .query(({ input }) => db.getDetailedSubmission(input.studentId, input.quizId)),
+    
+    // تأكيد وجود دالة submit في مسار quizzes.submit
+    submit: protectedProcedure
+      .input(
+        z.object({
+          quizId: z.number(),
+          answers: z.array(
+            z.object({
+              questionId: z.number(),
+              selectedOptionId: z.number().optional(),
+              textAnswer: z.string().optional(),
+              imageUrl: z.string().optional(),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const studentId = ctx.user.id;
+        
+        // جلب أسئلة الاختبار للتحقق من الإجابات الصحيحة (للتصحيح التلقائي للاختيارات)
+        const quiz = await db.getFullQuiz(input.quizId);
+        if (!quiz) throw new Error("الاختبار غير موجود");
+
+        for (const answer of input.answers) {
+          let score = null;
+          let gradedAt = null;
+
+          const question = quiz.questions.find(q => q.id === answer.questionId);
+          if (question && question.questionType === 'multiple_choice' && answer.selectedOptionId) {
+            // تصحيح تلقائي للأسئلة متعددة الخيارات
+            const selectedOption = question.options.find(o => o.id === answer.selectedOptionId);
+            score = (selectedOption && selectedOption.isCorrect === 1) ? 1 : 0;
+            gradedAt = new Date();
+          }
+
+          await db.createStudentAnswer({
+            quizId: input.quizId,
+            studentId,
+            questionId: answer.questionId,
+            selectedOptionId: answer.selectedOptionId,
+            textAnswer: answer.textAnswer,
+            imageUrl: answer.imageUrl,
+            score,
+            gradedAt,
+          });
+        }
+
+        return { success: true, status: 'submitted' };
+      }),
+
     gradeAnswer: protectedProcedure
       .input(z.object({
         answerId: z.number(),

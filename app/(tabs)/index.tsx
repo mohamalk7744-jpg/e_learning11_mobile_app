@@ -15,8 +15,10 @@ export default function HomeScreen() {
   const { user, loading: authLoading, isAuthenticated, logout } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
+  // جلب البيانات فقط إذا كان المستخدم طالباً
   const { data: stats, isLoading: statsLoading, refetch } = trpc.users.getStats.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role !== 'admin'
+    enabled: isAuthenticated && user?.role !== 'admin',
+    retry: 1
   });
 
   useEffect(() => {
@@ -24,6 +26,7 @@ export default function HomeScreen() {
       if (!isAuthenticated) {
         router.replace('/auth/login');
       } else if (user?.role === 'admin') {
+        // تحويل فوري للأدمن
         router.replace('/admin');
       }
     }
@@ -35,7 +38,8 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  if (authLoading || (statsLoading && !refreshing)) {
+  // حماية ضد الصفحة البيضاء: إذا كان جاري التحميل، نعرض مؤشر
+  if (authLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
@@ -43,12 +47,27 @@ export default function HomeScreen() {
     );
   }
 
-  if (!isAuthenticated || !stats) {
-    return null;
+  // إذا كان أدمن، لا تعرض محتوى الطلاب (سيتم التحويل)
+  if (user?.role === 'admin') {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+        <ThemedText style={{ marginTop: 10 }}>جاري الانتقال لوحة التحكم...</ThemedText>
+      </ThemedView>
+    );
   }
 
-  const progressPercent = stats.totalLessons > 0 
-    ? Math.round((stats.completedLessons / stats.totalLessons) * 100) 
+  // قيم افتراضية حتى لو لم تكتمل البيانات بعد لضمان عدم ظهور صفحة بيضاء
+  const displayStats = {
+    totalLessons: stats?.totalLessons || 0,
+    completedLessons: stats?.completedLessons || 0,
+    lessonsToday: stats?.lessonsToday || 0,
+    quizzesToday: stats?.quizzesToday || 0,
+    newDiscounts: stats?.newDiscounts || 0,
+  };
+
+  const progressPercent = displayStats.totalLessons > 0 
+    ? Math.round((displayStats.completedLessons / displayStats.totalLessons) * 100) 
     : 0;
 
   return (
@@ -75,17 +94,17 @@ export default function HomeScreen() {
           <View style={styles.statsGrid}>
             <View style={[styles.statCard, { backgroundColor: '#EEF2FF' }]}>
               <Ionicons name="book" size={24} color="#4F46E5" />
-              <ThemedText style={[styles.statNumber, { color: '#4F46E5' }]}>{stats.lessonsToday}</ThemedText>
+              <ThemedText style={[styles.statNumber, { color: '#4F46E5' }]}>{displayStats.lessonsToday}</ThemedText>
               <ThemedText style={styles.statLabel}>دروس اليوم</ThemedText>
             </View>
             <View style={[styles.statCard, { backgroundColor: '#FFF7ED' }]}>
               <Ionicons name="document-text" size={24} color="#EA580C" />
-              <ThemedText style={[styles.statNumber, { color: '#EA580C' }]}>{stats.quizzesToday}</ThemedText>
+              <ThemedText style={[styles.statNumber, { color: '#EA580C' }]}>{displayStats.quizzesToday}</ThemedText>
               <ThemedText style={styles.statLabel}>اختبارات</ThemedText>
             </View>
             <View style={[styles.statCard, { backgroundColor: '#F0FDF4' }]}>
               <Ionicons name="gift" size={24} color="#16A34A" />
-              <ThemedText style={[styles.statNumber, { color: '#16A34A' }]}>{stats.newDiscounts}</ThemedText>
+              <ThemedText style={[styles.statNumber, { color: '#16A34A' }]}>{displayStats.newDiscounts}</ThemedText>
               <ThemedText style={styles.statLabel}>عروض</ThemedText>
             </View>
           </View>
@@ -109,7 +128,7 @@ export default function HomeScreen() {
             />
           </View>
           <ThemedText style={styles.progressDetailText}>
-            أكملت {stats.completedLessons} من أصل {stats.totalLessons} درس بنجاح
+            أكملت {displayStats.completedLessons} من أصل {displayStats.totalLessons} درس بنجاح
           </ThemedText>
         </View>
 
@@ -199,11 +218,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '800',
+    textAlign: 'right',
   },
   subtitle: {
     fontSize: 14,
     color: '#6B7280',
     marginTop: 4,
+    textAlign: 'right',
   },
   avatarPlaceholder: {
     width: 60,
@@ -279,17 +300,22 @@ const styles = StyleSheet.create({
   actionsContainer: {
     marginBottom: 24,
   },
+  sectionTitle: {
+    marginBottom: 15,
+    textAlign: 'right',
+  },
   actionButton: {
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    marginBottom: 10,
+    borderRadius: 12,
+    marginBottom: 12,
     alignItems: 'center',
+    elevation: 1,
   },
   actionButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   logoutButton: {
     paddingVertical: 12,
