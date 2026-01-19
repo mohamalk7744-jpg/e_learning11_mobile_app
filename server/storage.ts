@@ -85,10 +85,11 @@ async function saveLocally(relKey: string, data: Buffer): Promise<{ key: string;
   
   fs.writeFileSync(filePath, data);
   
-  // إرجاع URL محلي
+  // إرجاع URL محلي كامل
+  const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
   return { 
     key, 
-    url: `/uploads/${key}` 
+    url: `${baseUrl.replace(/\/$/, "")}/uploads/${key}` 
   };
 }
 

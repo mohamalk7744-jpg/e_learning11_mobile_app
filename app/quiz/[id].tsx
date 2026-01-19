@@ -19,7 +19,8 @@ export default function QuizScreen() {
   const [answers, setAnswers] = useState<Record<number, { selectedOptionId?: number, textAnswer?: string, imageUrl?: string }>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showResult, setShowResult] = useState(false);
-  const [scoreResult, setScoreResult] = useState<{ score?: number; totalQuestions?: number; correctAnswers?: number, status: string } | null>(null);
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [scoreResult, setScoreResult] = useState<{ score?: number; totalQuestions?: number; percentage?: number, status: string } | null>(null);
 
   const { data: quiz, isLoading } = trpc.quizzes.getById.useQuery({ id: quizId });
   const uploadMutation = trpc.storage.upload.useMutation();
@@ -80,6 +81,24 @@ export default function QuizScreen() {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
       handleSubmit();
+    }
+  };
+
+  const handleBackPress = () => {
+    const answeredCount = Object.keys(answers).length;
+    const totalQuestions = quiz?.questions?.length || 0;
+
+    if (answeredCount > 0 && answeredCount < totalQuestions) {
+      Alert.alert(
+        "تنبيه",
+        `لقد أجبت على ${answeredCount} من أصل ${totalQuestions} أسئلة. إذا خرجت الآن، سيتم اعتماد إجاباتك الحالية فقط. هل أنت متأكد من الخروج؟`,
+        [
+          { text: "إلغاء", style: "cancel" },
+          { text: "خروج على أي حال", style: "destructive", onPress: () => router.back() }
+        ]
+      );
+    } else {
+      router.back();
     }
   };
 
@@ -173,29 +192,62 @@ export default function QuizScreen() {
     }
   };
 
+  if (!isConfirmed && quiz) {
+    return (
+      <ThemedView style={[styles.container, styles.centered, { padding: 20 }]}>
+        <Ionicons name="help-circle-outline" size={80} color="#007AFF" />
+        <ThemedText type="title" style={{ marginTop: 20, textAlign: 'center' }}>{quiz.title}</ThemedText>
+        <ThemedText style={{ marginTop: 10, textAlign: 'center', opacity: 0.7 }}>
+          {quiz.description || "هل أنت مستعد لبدء الاختبار؟"}
+        </ThemedText>
+        <View style={styles.infoBox}>
+          <ThemedText style={styles.infoText}>• عدد الأسئلة: {quiz.questions.length}</ThemedText>
+          <ThemedText style={styles.infoText}>• نوع الاختبار: {quiz.type === 'daily' ? 'يومي (تصحيح فوري)' : 'رسمي (تصحيح يدوي)'}</ThemedText>
+        </View>
+        <Pressable style={styles.startButtonLarge} onPress={() => setIsConfirmed(true)}>
+          <ThemedText style={styles.startButtonTextLarge}>أنا مستعد، ابدأ الآن</ThemedText>
+        </Pressable>
+        <Pressable onPress={() => router.back()} style={{ marginTop: 20 }}>
+          <ThemedText style={{ color: '#FF3B30' }}>رجوع</ThemedText>
+        </Pressable>
+      </ThemedView>
+    );
+  }
+
   if (showResult && scoreResult) {
+    const isDaily = quiz?.type === 'daily';
     return (
       <ThemedView style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.resultCard}>
             <View style={styles.successIconContainer}>
               <Ionicons 
-                name="checkmark-circle" 
+                name={isDaily ? "trophy" : "checkmark-circle"} 
                 size={100} 
-                color="#34C759" 
+                color={isDaily ? "#FFD700" : "#34C759"} 
               />
             </View>
             
             <ThemedText type="title" style={styles.successTitle}>
-              تم إرسال إجابتك بنجاح!
+              {isDaily ? "اكتمل الاختبار!" : "تم إرسال إجابتك بنجاح!"}
             </ThemedText>
             
-            <View style={styles.successMessageBox}>
-              <Ionicons name="notifications" size={24} color="#007AFF" />
-              <ThemedText style={styles.successMessage}>
-                شكراً لإكمال الاختبار. ستظهر درجاتك بعد تصحيح المعلم.
-              </ThemedText>
-            </View>
+            {isDaily ? (
+              <View style={styles.scoreBox}>
+                <ThemedText style={styles.scoreLabel}>درجتك هي:</ThemedText>
+                <ThemedText style={styles.scoreValue}>{scoreResult.percentage}%</ThemedText>
+                <ThemedText style={styles.scoreDetail}>
+                  أجبت بشكل صحيح على {scoreResult.score} من أصل {scoreResult.totalQuestions}
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.successMessageBox}>
+                <Ionicons name="notifications" size={24} color="#007AFF" />
+                <ThemedText style={styles.successMessage}>
+                  شكراً لإكمال الاختبار. ستظهر درجاتك بعد تصحيح المعلم.
+                </ThemedText>
+              </View>
+            )}
 
             <Pressable 
               style={styles.returnButton} 
@@ -213,7 +265,7 @@ export default function QuizScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.closeButton}>
+        <Pressable onPress={handleBackPress} style={styles.closeButton}>
           <ThemedText style={styles.closeIcon}>✕</ThemedText>
         </Pressable>
         <View style={styles.progressContainer}>
@@ -382,5 +434,13 @@ const styles = StyleSheet.create({
   returnButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   
   backButton: { marginTop: 20, padding: 12 },
-  backButtonText: { color: '#007AFF', fontSize: 16 }
+  backButtonText: { color: '#007AFF', fontSize: 16 },
+  infoBox: { backgroundColor: '#F0F7FF', padding: 15, borderRadius: 12, width: '100%', marginTop: 20, gap: 8 },
+  infoText: { textAlign: 'right', color: '#4B5563' },
+  startButtonLarge: { backgroundColor: '#007AFF', paddingVertical: 16, paddingHorizontal: 40, borderRadius: 12, marginTop: 30, width: '100%', alignItems: 'center' },
+  startButtonTextLarge: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  scoreBox: { alignItems: 'center', backgroundColor: '#F0F7FF', padding: 20, borderRadius: 16, width: '100%', gap: 10 },
+  scoreLabel: { fontSize: 16, color: '#4B5563' },
+  scoreValue: { fontSize: 48, fontWeight: 'bold', color: '#007AFF' },
+  scoreDetail: { fontSize: 14, color: '#6B7280' }
 });

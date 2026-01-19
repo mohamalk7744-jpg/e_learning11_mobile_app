@@ -273,27 +273,33 @@ export default function ResultsScreen() {
           {submissionsQuery.isLoading ? (
             <ActivityIndicator color="#007AFF" />
           ) : (
-            submissionsQuery.data?.map((item) => (
-              <TouchableOpacity 
-                key={item.studentId} 
-                style={styles.resultRow}
-                onPress={() => {
-                  if (selectedType !== 'daily') {
-                    setSelectedStudent({ id: item.studentId, name: item.studentName });
-                    navigateTo('grading');
-                  }
-                }}
-              >
-                <View style={styles.studentDetails}>
-                  <ThemedText style={styles.studentName}>{item.studentName}</ThemedText>
-                  <ThemedText style={styles.submittedDate}>بانتظار مراجعتك</ThemedText>
-                </View>
-                <View style={styles.percentageContainer}>
-                  <ThemedText style={styles.percentageText}>{item.percentage}%</ThemedText>
-                </View>
-                {selectedType !== 'daily' && <Ionicons name="create-outline" size={24} color="#007AFF" />}
-              </TouchableOpacity>
-            ))
+            submissionsQuery.data?.map((item) => {
+              const studentName = item?.studentName || "طالب مجهول";
+              const percentage = item?.percentage ?? 0;
+              return (
+                <TouchableOpacity 
+                  key={item.studentId} 
+                  style={styles.resultRow}
+                  onPress={() => {
+                    if (selectedType !== 'daily') {
+                      setSelectedStudent({ id: item.studentId, name: studentName });
+                      navigateTo('grading');
+                    }
+                  }}
+                >
+                  <View style={styles.studentDetails}>
+                    <ThemedText style={styles.studentName}>{studentName}</ThemedText>
+                    <ThemedText style={styles.submittedDate}>
+                      {selectedType === 'daily' ? "تصحيح تلقائي" : "بانتظار مراجعتك"}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.percentageContainer}>
+                    <ThemedText style={styles.percentageText}>{percentage}%</ThemedText>
+                  </View>
+                  {selectedType !== 'daily' && <Ionicons name="create-outline" size={24} color="#007AFF" />}
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       );
@@ -306,94 +312,100 @@ export default function ResultsScreen() {
           {detailedSubmissionQuery.isLoading ? (
             <ActivityIndicator color="#007AFF" />
           ) : (
-            detailedSubmissionQuery.data?.map((ans) => (
-              <View key={ans.answerId} style={styles.gradingCard}>
-                <View style={styles.questionHeader}>
-                  <ThemedText style={styles.questionNumber}>السؤال {ans.questionId}</ThemedText>
-                  <View style={[styles.questionTypeBadge, ans.questionType === 'essay' ? styles.essayBadge : styles.shortBadge]}>
-                    <ThemedText style={styles.questionTypeText}>
-                      {ans.questionType === 'essay' ? 'سؤال مفتوح' : 'سؤال قصير'}
-                    </ThemedText>
-                  </View>
-                </View>
-                
-                <ThemedText style={styles.questionText}>{ans.question}</ThemedText>
-                
-                {(ans.questionType === 'essay' || ans.questionType === 'short_answer') && (
-                  <View style={styles.answerSection}>
-                    <View style={styles.answerTypeHeader}>
-                      <Ionicons name="person" size={16} color="#6B7280" />
-                      <ThemedText style={styles.answerTypeLabel}>إجابة الطالب:</ThemedText>
-                    </View>
-                    
-                    {ans.textAnswer ? (
-                      <View style={styles.textAnswerBox}>
-                        <ThemedText style={styles.studentTextAns}>{ans.textAnswer}</ThemedText>
-                      </View>
-                    ) : null}
-                    
-                    {ans.imageUrl ? (
-                      <View style={styles.imageAnswerBox}>
-                        <View style={styles.imageAnswerHeader}>
-                          <Ionicons name="image" size={16} color="#007AFF" />
-                          <ThemedText style={styles.imageLabel}>صورة الإجابة:</ThemedText>
-                        </View>
-                        <TouchableOpacity 
-                          style={styles.imageContainer}
-                          onPress={() => {
-                            // يمكن إضافة عرض الصورة بحجم كامل هنا
-                            Alert.alert("معاينة الصورة", "اضغط على الصورة للتكبير", [
-                              { text: "إغلاق", style: "cancel" }
-                            ]);
-                          }}
-                        >
-                          <Image 
-                            source={{ uri: ans.imageUrl }} 
-                            style={styles.ansImage} 
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <View style={styles.noAnswerBox}>
-                        <Ionicons name="alert-circle" size={20} color="#9CA3AF" />
-                        <ThemedText style={styles.noAnswerText}>لم يقم الطالب بإرسال إجابة</ThemedText>
-                      </View>
-                    )}
-                  </View>
-                )}
+            detailedSubmissionQuery.data?.map((ans) => {
+              const questionText = ans?.question || "سؤال غير معروف";
+              const textAnswer = ans?.textAnswer || "";
+              const imageUrl = ans?.imageUrl || null;
+              const score = ans?.score;
 
-                <View style={styles.scoreAction}>
-                  <View style={styles.scoreLabel}>
-                    <Ionicons name="create" size={18} color="#6B7280" />
-                    <ThemedText style={styles.label}>الدرجة:</ThemedText>
+              return (
+                <View key={ans.answerId} style={styles.gradingCard}>
+                  <View style={styles.questionHeader}>
+                    <ThemedText style={styles.questionNumber}>السؤال {ans.questionId}</ThemedText>
+                    <View style={[styles.questionTypeBadge, ans.questionType === 'essay' ? styles.essayBadge : styles.shortBadge]}>
+                      <ThemedText style={styles.questionTypeText}>
+                        {ans.questionType === 'essay' ? 'سؤال مفتوح' : 'سؤال قصير'}
+                      </ThemedText>
+                    </View>
                   </View>
-                  <View style={styles.scoreBtns}>
-                    <TouchableOpacity 
-                      style={[styles.scoreBtn, ans.score === 1 && styles.scoreBtnActive]}
-                      onPress={() => gradeMutation.mutate({ answerId: ans.answerId, score: 1 })}
-                      disabled={gradeMutation.isPending}
-                    >
-                      <ThemedText style={ans.score === 1 ? styles.whiteText : styles.blueText}>✓ 1</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.scoreBtn, ans.score === 0 && styles.scoreBtnWrong]}
-                      onPress={() => gradeMutation.mutate({ answerId: ans.answerId, score: 0 })}
-                      disabled={gradeMutation.isPending}
-                    >
-                      <ThemedText style={ans.score === 0 ? styles.whiteText : styles.redText}>✗ 0</ThemedText>
-                    </TouchableOpacity>
+                  
+                  <ThemedText style={styles.questionText}>{questionText}</ThemedText>
+                  
+                  {(ans.questionType === 'essay' || ans.questionType === 'short_answer') && (
+                    <View style={styles.answerSection}>
+                      <View style={styles.answerTypeHeader}>
+                        <Ionicons name="person" size={16} color="#6B7280" />
+                        <ThemedText style={styles.answerTypeLabel}>إجابة الطالب:</ThemedText>
+                      </View>
+                      
+                      {textAnswer ? (
+                        <View style={styles.textAnswerBox}>
+                          <ThemedText style={styles.studentTextAns}>{textAnswer}</ThemedText>
+                        </View>
+                      ) : null}
+                      
+                      {imageUrl ? (
+                        <View style={styles.imageAnswerBox}>
+                          <View style={styles.imageAnswerHeader}>
+                            <Ionicons name="image" size={16} color="#007AFF" />
+                            <ThemedText style={styles.imageLabel}>صورة الإجابة:</ThemedText>
+                          </View>
+                          <TouchableOpacity 
+                            style={styles.imageContainer}
+                            onPress={() => {
+                              Alert.alert("معاينة الصورة", "اضغط على الصورة للتكبير", [
+                                { text: "إغلاق", style: "cancel" }
+                              ]);
+                            }}
+                          >
+                            <Image 
+                              source={{ uri: imageUrl }} 
+                              style={styles.ansImage} 
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (!textAnswer ? (
+                        <View style={styles.noAnswerBox}>
+                          <Ionicons name="alert-circle" size={20} color="#9CA3AF" />
+                          <ThemedText style={styles.noAnswerText}>لم يقم الطالب بإرسال إجابة</ThemedText>
+                        </View>
+                      ) : null)}
+                    </View>
+                  )}
+
+                  <View style={styles.scoreAction}>
+                    <View style={styles.scoreLabel}>
+                      <Ionicons name="create" size={18} color="#6B7280" />
+                      <ThemedText style={styles.label}>الدرجة:</ThemedText>
+                    </View>
+                    <View style={styles.scoreBtns}>
+                      <TouchableOpacity 
+                        style={[styles.scoreBtn, score === 1 && styles.scoreBtnActive]}
+                        onPress={() => gradeMutation.mutate({ answerId: ans.answerId, score: 1 })}
+                        disabled={gradeMutation.isPending}
+                      >
+                        <ThemedText style={score === 1 ? styles.whiteText : styles.blueText}>✓ 1</ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.scoreBtn, score === 0 && styles.scoreBtnWrong]}
+                        onPress={() => gradeMutation.mutate({ answerId: ans.answerId, score: 0 })}
+                        disabled={gradeMutation.isPending}
+                      >
+                        <ThemedText style={score === 0 ? styles.whiteText : styles.redText}>✗ 0</ThemedText>
+                      </TouchableOpacity>
+                    </View>
                   </View>
+                  
+                  {score !== null && (
+                    <View style={styles.gradedIndicator}>
+                      <Ionicons name="checkmark-done-circle" size={16} color="#34C759" />
+                      <ThemedText style={styles.gradedText}>تم التصحيح</ThemedText>
+                    </View>
+                  )}
                 </View>
-                
-                {ans.score !== null && (
-                  <View style={styles.gradedIndicator}>
-                    <Ionicons name="checkmark-done-circle" size={16} color="#34C759" />
-                    <ThemedText style={styles.gradedText}>تم التصحيح</ThemedText>
-                  </View>
-                )}
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
       );

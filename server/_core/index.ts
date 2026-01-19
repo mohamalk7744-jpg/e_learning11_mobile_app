@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
@@ -59,6 +60,10 @@ async function startServer() {
   });
 
   registerOAuthRoutes(app);
+
+  // Serve uploaded files
+  const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || './uploads');
+  app.use('/uploads', express.static(uploadDir));
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });

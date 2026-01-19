@@ -248,9 +248,20 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const studentId = ctx.user.id;
         
-        // جلب أسئلة الاختبار للتحقق من الإجابات الصحيحة (للتصحيح التلقائي للاختيارات)
+        // جلب أسئلة الاختبار للتحقق من الإجابات الصحيحة
         const quiz = await db.getFullQuiz(input.quizId);
         if (!quiz) throw new Error("الاختبار غير موجود");
+
+        // التحقق مما إذا كان الطالب قد أدى الاختبار مسبقاً (للاختبارات الرسمية)
+        const existingAttempts = await db.getStudentQuizAttempts(studentId, [input.quizId]);
+        const hasAttempted = existingAttempts[input.quizId]?.hasAttempted;
+
+        if (hasAttempted && (quiz.type === 'monthly' || quiz.type === 'semester')) {
+          throw new Error("لا يمكنك إعادة أداء الاختبارات الرسمية");
+        }
+
+        let totalScore = 0;
+        let isAutoGraded = quiz.type === 'daily';
 
         for (const answer of input.answers) {
           let score = null;
@@ -258,12 +269,13 @@ export const appRouter = router({
 
           const question = quiz.questions.find(q => q.id === answer.questionId);
           if (question && question.questionType === 'multiple_choice' && answer.selectedOptionId) {
-            // تصحيح تلقائي للأسئلة متعددة الخيارات
             const selectedOption = question.options.find(o => o.id === answer.selectedOptionId);
             score = (selectedOption && selectedOption.isCorrect === 1) ? 1 : 0;
             gradedAt = new Date();
+            if (score === 1) totalScore++;
           }
 
+          // حفظ الإجابة (فقط إذا لم تكن محاولة مكررة لاختبار رسمي)
           await db.createStudentAnswer({
             quizId: input.quizId,
             studentId,
@@ -274,6 +286,18 @@ export const appRouter = router({
             score,
             gradedAt,
           });
+        }
+
+        // إذا كان اختباراً يومياً، نعيد النتيجة فوراً
+        if (quiz.type === 'daily') {
+          const percentage = Math.round((totalScore / quiz.questions.length) * 100);
+          return { 
+            success: true, 
+            status: 'completed', 
+            score: totalScore, 
+            totalQuestions: quiz.questions.length,
+            percentage 
+          };
         }
 
         return { success: true, status: 'submitted' };
@@ -314,6 +338,63 @@ export const appRouter = router({
           resultsPublished: 1
         });
         return { success: true };
+      }),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          subjectId: z.number(),
+          title: z.string().min(1),
+          description: z.string().optional(),
+          type: z.enum(["daily", "monthly", "semester"]),
+          dayNumber: z.number().optional(),
+          questions: z.array(
+            z.object({
+              question: z.string().min(1),
+              questionType: z.enum(["multiple_choice", "short_answer", "essay"]),
+              correctAnswerText: z.string().optional(),
+              correctAnswerImageUrl: z.string().optional(),
+              options: z.array(
+                z.object({
+                  text: z.string().min(1),
+                  isCorrect: z.boolean(),
+                })
+              ),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const quizId = await db.createQuiz({
+          subjectId: input.subjectId,
+          title: input.title,
+          description: input.description,
+          type: input.type,
+          dayNumber: input.dayNumber,
+          createdBy: ctx.user.id,
+        });
+
+        for (const q of input.questions) {
+          const questionId = await db.createQuizQuestion({
+            quizId: Number(quizId),
+            question: q.question,
+            questionType: q.questionType,
+            correctAnswerText: q.correctAnswerText,
+            correctAnswerImageUrl: q.correctAnswerImageUrl,
+          });
+
+          if (q.questionType === "multiple_choice") {
+            for (const opt of q.options) {
+              await db.createQuizOption({
+                questionId: Number(questionId),
+                text: opt.text,
+                isCorrect: opt.isCorrect ? 1 : 0,
+              });
+            }
+          }
+        }
+
+        return { success: true, id: quizId };
       }),
   }),
 
